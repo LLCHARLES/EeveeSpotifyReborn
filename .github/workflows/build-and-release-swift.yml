@@ -104,13 +104,28 @@ jobs:
         git clone https://github.com/BillyCurtis/OpenSpotifySafariExtension
         echo "OPENSPOTIFYSAFARIEXTENSION=OpenSpotifySafariExtension/OpenSpotifySafariExtension.appex" >> $GITHUB_ENV
 
-    - name: Download Decrypted Spotify Package
-      run: |
-        response=$(curl -ks 'https://decrypt.whoeevee.com/decrypted?appId=324684580&apiKey=${{ secrets.EEVEEDECRYPTER_API_KEY }}')
-        link=$(echo "$response" | jq -r '.link')
-        wget --no-check-certificate -q $link
-        echo "SPOTIFY_VERSION=${${(s/-/)link}[2]%.ipa}" >> $GITHUB_ENV
-        echo "SPOTIFY_PACKAGE=$(echo *.ipa)" >> $GITHUB_ENV
+    - name: Download Spotify IPA from Dropbox
+  run: |
+    # 使用你的实际 Dropbox 链接
+    wget -O Spotify.ipa "https://www.dropbox.com/scl/fi/2umg1ri7nodbaxb0rzkj5/EeveeSpotify-9.0.86.ipa?rlkey=y36kpzysdo4ffzc6xsqvv8rvh&st=8cd2jiq4&dl=1"
+    echo "SPOTIFY_VERSION=8.9.20" >> $GITHUB_ENV  # 替换为实际的 Spotify 版本
+    echo "SPOTIFY_PACKAGE=Spotify.ipa" >> $GITHUB_ENV
+
+   - name: Check Spotify Package
+  run: |
+    if [ -z "$SPOTIFY_PACKAGE" ]; then
+      echo "❌ Error: SPOTIFY_PACKAGE is empty"
+      exit 1
+    fi
+    
+    if [ ! -f "$SPOTIFY_PACKAGE" ]; then
+      echo "❌ Error: Spotify IPA file not found: $SPOTIFY_PACKAGE"
+      ls -la
+      exit 1
+    fi
+    
+    echo "✅ Spotify IPA found: $SPOTIFY_PACKAGE"
+    echo "File size: $(wc -c < "$SPOTIFY_PACKAGE") bytes"
 
     - name: Setup insert-dylib
       run: |
