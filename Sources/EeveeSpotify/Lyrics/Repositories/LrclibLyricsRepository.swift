@@ -15,7 +15,7 @@ class LrclibLyricsRepository: LyricsRepository {
         session = URLSession(configuration: configuration)
     }
     
-    static let originalApiUrl = "https://lrclib.net/api"
+    static let originalApiUrl = "https://qqmusic-lyrics-api.zeabur.app/api"
     
     static let shared = LrclibLyricsRepository(
         apiUrl: UserDefaults.lyricsOptions.lrclibUrl
@@ -62,33 +62,85 @@ class LrclibLyricsRepository: LyricsRepository {
         return try JSONDecoder().decode(LrclibSong.self, from: data)
     }
     
-    private func mapSyncedLyricsLines(_ lines: [String]) -> [LyricsLineDto] {
-        return lines.compactMap { line in
-            guard let match = line.firstMatch(
-                "\\[(?<minute>\\d*):(?<seconds>\\d+\\.\\d+|\\d+)\\] ?(?<content>.*)"
-            ) else {
-                return nil
+    // 解析 LRC 格式歌词
+    private func parseLrcLyrics(_ lrcContent: String) -> [LyricsLineDto] {
+        var lines: [LyricsLineDto] = []
+        let pattern = "\\[(\\d+):(\\d+)\\.(\\d+)\\](.*)"
+        
+        do {
+            let regex = try NSRegularExpression(pattern: pattern)
+            let nsString = lrcContent as NSString
+            let matches = regex.matches(in: lrcContent, range: NSRange(location: 0, length: nsString.length))
+            
+            for match in matches {
+                let minuteRange = match.range(at: 1)
+                let secondRange = match.range(at: 2)
+                let millisecondRange = match.range(at: 3)
+                let textRange = match.range(at: 4)
+                
+                let minute = Int(nsString.substring(with: minuteRange)) ?? 0
+                let second = Int(nsString.substring(with: secondRange)) ?? 0
+                let millisecond = Int(nsString.substring(with: millisecondRange)) ?? 0
+                let text = nsString.substring(with: textRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // 跳过元数据行（包含标签的行）
+                if text.hasPrefix("[") && text.contains("]") {
+                    continue
+                }
+                
+                let totalMs = (minute * 60 + second) * 1000 + millisecond * 10
+                
+                lines.append(LyricsLineDto(
+                    content: text,
+                    offsetMs: totalMs
+                ))
             }
             
-            var captures: [String: String] = [:]
+            // 按时间排序
+            lines.sort { ($0.offsetMs ?? 0) < ($1.offsetMs ?? 0) }
             
-            for name in ["minute", "seconds", "content"] {
-                let matchRange = match.range(withName: name)
+        } catch {
+            print("LRC parsing error: \(error)")
+        }
+        
+        return lines
+    }
+    
+    // 解析纯文本歌词
+    private func parsePlainLyrics(_ plainLyrics: String) -> [LyricsLineDto] {
+        return plainLyrics
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { LyricsLineDto(content: $0) }
+    }
+    
+    // 对齐翻译歌词和原歌词
+    private func alignTranslations(originalLines: [LyricsLineDto], translationLines: [LyricsLineDto]) -> [String] {
+        var alignedTranslations: [String] = Array(repeating: "", count: originalLines.count)
+        
+        for translation in translationLines {
+            // 找到时间戳最接近的原歌词行
+            var closestIndex = -1
+            var minTimeDiff = Int.max
+            
+            for (index, originalLine) in originalLines.enumerated() {
+                guard let originalOffsetMs = originalLine.offsetMs,
+                      let translationOffsetMs = translation.offsetMs else { continue }
                 
-                if let substringRange = Range(matchRange, in: line) {
-                    captures[name] = String(line[substringRange])
+                let timeDiff = abs(originalOffsetMs - translationOffsetMs)
+                if timeDiff < minTimeDiff {
+                    minTimeDiff = timeDiff
+                    closestIndex = index
                 }
             }
             
-            let minute = Int(captures["minute"]!)!
-            let seconds = Float(captures["seconds"]!)!
-            let content = captures["content"]!
-            
-            return LyricsLineDto(
-                content: content.lyricsNoteIfEmpty,
-                offsetMs: Int(minute * 60 * 1000 + Int(seconds * 1000))
-            )
+            // 如果时间差在合理范围内（比如2秒内），就认为是匹配的
+            if closestIndex >= 0 && minTimeDiff <= 2000 && closestIndex < alignedTranslations.count {
+                alignedTranslations[closestIndex] = translation.content
+            }
         }
+        
+        return alignedTranslations
     }
 
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
@@ -113,25 +165,52 @@ class LrclibLyricsRepository: LyricsRepository {
             )
         }
 
-        if let syncedLyrics = song.syncedLyrics {
-            let lines = Array(syncedLyrics.components(separatedBy: "\n").dropLast())
-            return LyricsDto(
-                lines: mapSyncedLyricsLines(lines),
-                timeSynced: true,
-                romanization: lines.canBeRomanized ? .canBeRomanized : .original
+        var lyricsLines: [LyricsLineDto] = []
+        var timeSynced = false
+        var translation: LyricsTranslationDto? = nil
+        
+        // 优先使用时间轴歌词 (syncedLyrics)
+        if let syncedLyrics = song.syncedLyrics, !syncedLyrics.isEmpty {
+            lyricsLines = parseLrcLyrics(syncedLyrics)
+            timeSynced = true
+        } 
+        // 其次使用纯文本歌词 (plainLyrics)
+        else if let plainLyrics = song.plainLyrics, !plainLyrics.isEmpty {
+            lyricsLines = parsePlainLyrics(plainLyrics)
+            timeSynced = false
+        }
+        
+        // 处理翻译歌词 - 使用对齐方法
+        if let translatedLyrics = song.translatedLyrics, !translatedLyrics.isEmpty {
+            // 解析翻译歌词，不过滤任何内容
+            let translationLines = parseLrcLyrics(translatedLyrics)
+            
+            // 使用时间戳对齐翻译和原歌词
+            let alignedTranslations = alignTranslations(
+                originalLines: lyricsLines,
+                translationLines: translationLines
+            )
+            
+            translation = LyricsTranslationDto(
+                languageCode: "zh",
+                lines: alignedTranslations
             )
         }
         
-        guard let plainLyrics = song.plainLyrics else {
-            throw LyricsError.decodingError
-        }
+        // 处理罗马化歌词
+        var romanization = LyricsRomanizationStatus.original
         
-        let lines = Array(plainLyrics.components(separatedBy: "\n").dropLast())
+        // 简单判断：如果有中文歌词，则认为可以罗马化
+        let hasChinese = lyricsLines.contains { line in
+            line.content.range(of: "[\\u4e00-\\u9fff]", options: .regularExpression) != nil
+        }
+        romanization = hasChinese ? .canBeRomanized : .original
         
         return LyricsDto(
-            lines: lines.map { content in LyricsLineDto(content: content) },
-            timeSynced: false,
-            romanization: lines.canBeRomanized ? .canBeRomanized : .original
+            lines: lyricsLines,
+            timeSynced: timeSynced,
+            romanization: romanization,
+            translation: translation
         )
     }
 }
