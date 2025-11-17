@@ -107,7 +107,7 @@ jobs:
     - name: Download Spotify IPA from Dropbox
       run: |
         # 替换为你的实际 Dropbox 链接
-        wget -O Spotify.ipa "https://www.dropbox.com/s/你的文件链接/Spotify.ipa?dl=1"
+        wget -O Spotify.ipa "https://www.dropbox.com/scl/fi/7ur1ed7gsomvbuohb450a/EeveeSpotify-9.0.96.ipa?rlkey=4j2ggox38hu764nk2iop7a50e&st=ze88gt5f&dl=1"
         echo "SPOTIFY_VERSION=8.9.20" >> $GITHUB_ENV
         echo "SPOTIFY_PACKAGE=Spotify.ipa" >> $GITHUB_ENV
 
