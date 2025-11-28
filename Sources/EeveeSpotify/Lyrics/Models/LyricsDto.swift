@@ -115,11 +115,12 @@ struct LyricsDto {
         return alternative
     }
     
+// 修复 LyricsDto.swift 中的颜色设置：
     private func getDefaultColors() -> ColorData {
         var colorData = ColorData()
-        colorData.background = 0xFF000000  // 黑色背景
-        colorData.text = 0xFFFFFFFF        // 白色文字
-        colorData.highlightText = 0xFFFFFF00 // 黄色高亮
+        colorData.background = -0x1000000  // 黑色背景 (使用负值表示)
+        colorData.text = -1                // 白色文字  
+        colorData.highlightText = -256     // 黄色高亮
         return colorData
     }
 }
