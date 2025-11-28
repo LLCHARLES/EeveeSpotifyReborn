@@ -1,4 +1,3 @@
-// Lyrics.pb.swift
 // DO NOT EDIT.
 // swift-format-ignore-file
 //
@@ -20,8 +19,6 @@ fileprivate struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAP
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
 }
-
-// 删除旧的枚举和结构，添加新的定义
 
 enum SyncTypeEnum: SwiftProtobuf.Enum {
   typealias RawValue = Int
@@ -56,7 +53,6 @@ enum SyncTypeEnum: SwiftProtobuf.Enum {
 #if swift(>=4.2)
 
 extension SyncTypeEnum: CaseIterable {
-  // The compiler won't synthesize support with the UNRECOGNIZED case.
   static let allCases: [SyncTypeEnum] = [
     .unsynced,
     .lineSynced,
@@ -64,135 +60,74 @@ extension SyncTypeEnum: CaseIterable {
   ]
 }
 
-#endif  // swift(>=4.2)
+#endif
 
 struct Syllable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
   var startTimeMs: Int64 = 0
-
   var numChars: Int64 = 0
-
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 }
 
 struct LyricsLine {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
   var startTimeMs: Int64 = 0
-
   var words: String = String()
-
   var syllables: [Syllable] = []
-
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 }
 
 struct ColorData {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
   var background: Int32 = 0
-
   var text: Int32 = 0
-
   var highlightText: Int32 = 0
-
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 }
 
 struct AlternativeLanguages {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
   var language: String = String()
-
   var lines: [String] = []
-
   var isRtlLanguage: Bool = false
-
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 }
 
 struct LyricsResponse {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
   var syncType: SyncTypeEnum = .unsynced
-
   var lines: [LyricsLine] = []
-
   var provider: String = String()
-
   var providerLyricsId: String = String()
-
   var providerDisplayName: String = String()
-
   var syncLyricsUri: String = String()
-
   var isDenseTypeface: Bool = false
-
   var alternatives: [AlternativeLanguages] = []
-
   var language: String = String()
-
   var isRtlLanguage: Bool = false
-
   var fullscreenAction: Int32 = 0
-
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
   init() {}
 }
 
 struct ColorLyricsResponse {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
   var lyrics: LyricsResponse {
     get {return _lyrics ?? LyricsResponse()}
     set {_lyrics = newValue}
   }
-  /// Returns true if `lyrics` has been explicitly set.
-  var hasLyrics: Bool {return self._lyrics != nil}
-  /// Clears the value of `lyrics`. Subsequent reads from it will return its default value.
-  mutating func clearLyrics() {self._lyrics = nil}
-
   var colors: ColorData {
     get {return _colors ?? ColorData()}
     set {_colors = newValue}
   }
-  /// Returns true if `colors` has been explicitly set.
-  var hasColors: Bool {return self._colors != nil}
-  /// Clears the value of `colors`. Subsequent reads from it will return its default value.
-  mutating func clearColors() {self._colors = nil}
-
   var hasVocalRemoval: Bool = false
-
   var vocalRemovalColors: ColorData {
     get {return _vocalRemovalColors ?? ColorData()}
     set {_vocalRemovalColors = newValue}
   }
-  /// Returns true if `vocalRemovalColors` has been explicitly set.
-  var hasVocalRemovalColors: Bool {return self._vocalRemovalColors != nil}
-  /// Clears the value of `vocalRemovalColors`. Subsequent reads from it will return its default value.
-  mutating func clearVocalRemovalColors() {self._vocalRemovalColors = nil}
 
   var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -203,31 +138,6 @@ struct ColorLyricsResponse {
   fileprivate var _vocalRemovalColors: ColorData? = nil
 }
 
-  var rawValue: Int {
-    switch self {
-    case .unrestricted: return 0
-    case .showLyrics: return 1
-    case .showLyricsMonthlyLimit: return 2
-    case .monthlyLimitReached: return 3
-    case .UNRECOGNIZED(let i): return i
-    }
-  }
-}
-
-#if swift(>=4.2)
-
-extension LyricsRestriction: CaseIterable {
-  // The compiler won't synthesize support with the UNRECOGNIZED case.
-  static let allCases: [LyricsRestriction] = [
-    .unrestricted,
-    .showLyrics,
-    .showLyricsMonthlyLimit,
-    .monthlyLimitReached,
-  ]
-}
-
-#endif  // swift(>=4.2)
-
 #if swift(>=5.5) && canImport(_Concurrency)
 extension SyncTypeEnum: @unchecked Sendable {}
 extension Syllable: @unchecked Sendable {}
@@ -236,12 +146,7 @@ extension ColorData: @unchecked Sendable {}
 extension AlternativeLanguages: @unchecked Sendable {}
 extension LyricsResponse: @unchecked Sendable {}
 extension ColorLyricsResponse: @unchecked Sendable {}
-extension Lyrics: @unchecked Sendable {}
-extension LyricsData: @unchecked Sendable {}
-extension LyricsColors: @unchecked Sendable {}
-extension LyricsTranslation: @unchecked Sendable {}
-extension LyricsRestriction: @unchecked Sendable {}
-#endif  // swift(>=5.5) && canImport(_Concurrency)
+#endif
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
@@ -262,9 +167,6 @@ extension Syllable: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationB
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt64Field(value: &self.startTimeMs) }()
       case 2: try { try decoder.decodeSingularInt64Field(value: &self.numChars) }()
@@ -301,9 +203,6 @@ extension LyricsLine: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementatio
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt64Field(value: &self.startTimeMs) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.words) }()
@@ -338,16 +237,13 @@ extension LyricsLine: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementatio
 extension ColorData: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "ColorData"
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "background"),
-    2: .same(proto: "text"),
-    3: .same(proto: "highlightText"),
+    1: .same(proto: "backgroundColor"),
+    2: .same(proto: "textColor"),
+    3: .same(proto: "highlightTextColor"),
   ]
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt32Field(value: &self.background) }()
       case 2: try { try decoder.decodeSingularInt32Field(value: &self.text) }()
@@ -389,9 +285,6 @@ extension AlternativeLanguages: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.language) }()
       case 2: try { try decoder.decodeRepeatedStringField(value: &self.lines) }()
@@ -441,9 +334,6 @@ extension LyricsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularEnumField(value: &self.syncType) }()
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.lines) }()
@@ -526,9 +416,6 @@ extension ColorLyricsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._lyrics) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._colors) }()
@@ -540,22 +427,18 @@ extension ColorLyricsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
   }
 
   func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._lyrics {
+    if let v = self._lyrics {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    } }()
-    try { if let v = self._colors {
+    }
+    if let v = self._colors {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
+    }
     if self.hasVocalRemoval != false {
       try visitor.visitSingularBoolField(value: self.hasVocalRemoval, fieldNumber: 3)
     }
-    try { if let v = self._vocalRemovalColors {
+    if let v = self._vocalRemovalColors {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
-    } }()
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -568,49 +451,3 @@ extension ColorLyricsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     return true
   }
 }
-
-// 保留旧的实现，但标记为废弃
-extension Lyrics: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = "Lyrics"
-  static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "data"),
-    2: .same(proto: "colors"),
-  ]
-
-  mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularMessageField(value: &self._data) }()
-      case 2: try { try decoder.decodeSingularMessageField(value: &self._colors) }()
-      default: break
-      }
-    }
-  }
-
-  func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    try { if let v = self._data {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    } }()
-    try { if let v = self._colors {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  static func ==(lhs: Lyrics, rhs: Lyrics) -> Bool {
-    if lhs._data != rhs._data {return false}
-    if lhs._colors != rhs._colors {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-// ... 保留其他旧结构的实现（LyricsData, LyricsColors, LyricsTranslation, LyricsRestriction）
-// 这些代码保持不变，只是添加了 @available 标记
