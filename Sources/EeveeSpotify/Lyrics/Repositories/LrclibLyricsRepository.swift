@@ -118,47 +118,60 @@ class LrclibLyricsRepository: LyricsRepository {
             // 匹配整行时间戳格式: [start,duration]
             let linePattern = #"\[(\d+),(\d+)\](.*)"#
             
-            guard let lineMatch = lineString.range(of: linePattern, options: .regularExpression) else {
-                continue
-            }
-            
-            let nsString = lineString as NSString
-            let lineStartMs = Int(nsString.substring(with: NSRange(lineMatch.range(at: 1), in: lineString))) ?? 0
-            let lineContent = nsString.substring(with: NSRange(lineMatch.range(at: 3), in: lineString))
-            
-            var syllables: [SyllableDto] = []
-            var fullLineText = ""
-            
-            // 匹配单词和时间戳格式: (start,duration)word
-            let wordPattern = #"\((\d+),(\d+)\)([^\(\)]*)"#
-            
             do {
-                let regex = try NSRegularExpression(pattern: wordPattern)
-                let matches = regex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
+                let regex = try NSRegularExpression(pattern: linePattern)
+                let nsString = lineString as NSString
+                let matches = regex.matches(in: lineString, range: NSRange(location: 0, length: nsString.length))
                 
-                for match in matches {
-                    let wordStartMs = Int64(nsString.substring(with: NSRange(match.range(at: 1), in: lineContent))) ?? 0
-                    let wordText = nsString.substring(with: NSRange(match.range(at: 3), in: lineContent))
+                guard let match = matches.first else { continue }
+                
+                let lineStartMsRange = match.range(at: 1)
+                let lineContentRange = match.range(at: 3)
+                
+                let lineStartMs = Int(nsString.substring(with: lineStartMsRange)) ?? 0
+                let lineContent = nsString.substring(with: lineContentRange)
+                
+                var syllables: [SyllableDto] = []
+                var fullLineText = ""
+                
+                // 匹配单词和时间戳格式: (start,duration)word
+                let wordPattern = #"\((\d+),(\d+)\)([^\(\)]*)"#
+                
+                do {
+                    let wordRegex = try NSRegularExpression(pattern: wordPattern)
+                    let wordMatches = wordRegex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
+                    let nsLineContent = lineContent as NSString
                     
-                    fullLineText += wordText
-                    
-                    let syllable = SyllableDto(
-                        startTimeMs: wordStartMs,
-                        numChars: Int64(wordText.count)
-                    )
-                    syllables.append(syllable)
+                    for wordMatch in wordMatches {
+                        let wordStartMsRange = wordMatch.range(at: 1)
+                        let wordTextRange = wordMatch.range(at: 3)
+                        
+                        let wordStartMs = Int64(nsLineContent.substring(with: wordStartMsRange)) ?? 0
+                        let wordText = nsLineContent.substring(with: wordTextRange)
+                        
+                        fullLineText += wordText
+                        
+                        let syllable = SyllableDto(
+                            startTimeMs: wordStartMs,
+                            numChars: Int64(wordText.count)
+                        )
+                        syllables.append(syllable)
+                    }
+                } catch {
+                    print("YRC word parsing error: \(error)")
+                    continue
                 }
+                
+                let lineDto = LyricsLineDto(
+                    words: fullLineText,
+                    startTimeMs: Int64(lineStartMs),
+                    syllables: syllables.isEmpty ? nil : syllables
+                )
+                lines.append(lineDto)
             } catch {
-                print("YRC word parsing error: \(error)")
+                print("YRC line parsing error: \(error)")
                 continue
             }
-            
-            let lineDto = LyricsLineDto(
-                words: fullLineText,
-                startTimeMs: Int64(lineStartMs),
-                syllables: syllables.isEmpty ? nil : syllables
-            )
-            lines.append(lineDto)
         }
         
         // 按时间排序
@@ -219,12 +232,7 @@ class LrclibLyricsRepository: LyricsRepository {
         }
 
         if song.instrumental {
-            return LyricsDto(
-                lines: [],
-                timeSynced: false,
-                isSyllableSynced: false,
-                romanization: .original
-            )
+            return LyricsDto.instrumental()
         }
 
         var lyricsLines: [LyricsLineDto] = []
