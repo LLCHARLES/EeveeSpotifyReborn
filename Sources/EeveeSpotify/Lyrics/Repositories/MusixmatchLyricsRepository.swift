@@ -208,7 +208,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
 
                     for (index, subtitleTranslated) in subtitlesTranslated.enumerated() {
                         if !subtitleTranslated.text.isEmpty {
-                            lyricsLines[index].content = subtitleTranslated.text
+                            lyricsLines[index].words = subtitleTranslated.text
                         }
                     }
                 } else {
@@ -281,7 +281,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
                         plainLyrics
                         .components(separatedBy: "\n")
                         .dropLast()
-                        .map { LyricsLineDto(content: $0.lyricsNoteIfEmpty) },
+                        .map { LyricsLineDto(words: $0.lyricsNoteIfEmpty,startTimeMs: nil, syllables: nil) },
                     timeSynced: false,
                     isSyllableSynced: false,
                     romanization: lyricsLanguage.isCanBeRomanizedLanguage
