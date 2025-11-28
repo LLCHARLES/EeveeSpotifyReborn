@@ -10,15 +10,11 @@ func exitApplication() {
 }
 
 struct BasePremiumPatchingGroup: HookGroup { }
+
 struct IOS14PremiumPatchingGroup: HookGroup { }
 struct NonIOS14PremiumPatchingGroup: HookGroup { }
 struct IOS14And15PremiumPatchingGroup: HookGroup { }
 struct LatestPremiumPatchingGroup: HookGroup { }
-
-// 添加缺失的 Lyrics Hook Groups
-struct BaseLyricsGroup: HookGroup {}
-struct ModernLyricsGroup: HookGroup {}
-struct LegacyLyricsGroup: HookGroup {}
 
 func activatePremiumPatchingGroup() {
     BasePremiumPatchingGroup().activate()
