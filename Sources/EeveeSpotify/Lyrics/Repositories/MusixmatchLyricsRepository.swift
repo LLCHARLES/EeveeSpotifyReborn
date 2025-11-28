@@ -228,8 +228,8 @@ class MusixmatchLyricsRepository: LyricsRepository {
 
                     for (original, translation) in translations {
                         for i in 0..<lyricsLines.count {
-                            if lyricsLines[i].content == original {
-                                lyricsLines[i].content = translation
+                            if lyricsLines[i].words == original {
+                                lyricsLines[i].words = translation
                             }
                         }
                     }
