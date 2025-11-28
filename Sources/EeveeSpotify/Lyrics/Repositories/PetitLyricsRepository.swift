@@ -114,6 +114,7 @@ class PetitLyricsRepository: LyricsRepository {
                     )
                 },
                 timeSynced: true,
+                isSyllableSynced: false,
                 romanization: lyrics.lines.map { $0.linestring }.canBeRomanized
                     ? .canBeRomanized
                     : .original
@@ -126,6 +127,7 @@ class PetitLyricsRepository: LyricsRepository {
             return LyricsDto(
                 lines: lines.map { LyricsLineDto(content: $0) },
                 timeSynced: false,
+                isSyllableSynced: false,
                 romanization: lines.canBeRomanized ? .canBeRomanized : .original
             )
             
