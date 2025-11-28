@@ -3,10 +3,7 @@ import SwiftUI
 
 //
 
-struct BaseLyricsGroup: HookGroup { }
-
-struct LegacyLyricsGroup: HookGroup { }
-struct ModernLyricsGroup: HookGroup { }
+struct LyricsGroup: HookGroup { }
 
 var lyricsState = LyricsLoadingState()
 
@@ -18,20 +15,17 @@ private let petitLyricsRepository = PetitLyricsRepository()
 
 //
 
-private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
-    guard
-        let track = statefulPlayer?.currentTrack() ??
-                    nowPlayingScrollViewController?.loadedTrack
-        else {
-            throw LyricsError.noCurrentTrack
-        }
+private func loadCustomLyricsForCurrentTrack() throws -> LyricsDto {
+    guard let track = nowPlayingScrollViewController?.loadedTrack else {
+        throw LyricsError.noCurrentTrack
+    }
     
     let searchQuery = LyricsSearchQuery(
         title: track.trackTitle(),
         primaryArtist: EeveeSpotify.hookTarget == .lastAvailableiOS14
             ? track.artistTitle()
             : track.artistName(),
-        spotifyTrackId: track.trackIdentifier
+        spotifyTrackId: track.URI().spt_trackIdentifier()
     )
     
     let options = UserDefaults.lyricsOptions
@@ -113,65 +107,67 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     
     lyricsState.loadedSuccessfully = true
 
-    let lyrics = Lyrics.with {
-        $0.data = lyricsDto.toSpotifyLyricsData(source: source.description)
-    }
-    
-    return lyrics
+    return lyricsDto
 }
 
-func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics? = nil) throws -> Data {
-    guard
-        let track = statefulPlayer?.currentTrack() ??
-                    nowPlayingScrollViewController?.loadedTrack
-        else {
-            throw LyricsError.noCurrentTrack
-        }
-    
-    let trackIdentifier = track.trackIdentifier
-    
-    if !trackIdentifier.isEmpty && !originalPath.contains(trackIdentifier) {
-        throw LyricsError.trackMismatch
+func getLyricsDataForCurrentTrack(originalLyrics: ColorLyricsResponse? = nil) throws -> Data {
+    guard let track = nowPlayingScrollViewController?.loadedTrack else {
+        throw LyricsError.noCurrentTrack
     }
     
-    var lyrics = try loadCustomLyricsForCurrentTrack()
+    let lyricsDto = try loadCustomLyricsForCurrentTrack()
+    var colorLyricsResponse = lyricsDto.toSpotifyLyricsData(source: UserDefaults.lyricsSource.description)
     
+    // 处理颜色设置
     let lyricsColorsSettings = UserDefaults.lyricsColors
     
     if lyricsColorsSettings.displayOriginalColors, let originalLyrics = originalLyrics {
-        lyrics.colors = originalLyrics.colors
-    }
-    else {
-        let extractedColor = switch EeveeSpotify.hookTarget {
-        case .lastAvailableiOS14:
-            track.extractedColorHex()
-        default:
-            track.metadata()["extracted_color"]
-        }
+        // 使用原始响应的颜色
+        colorLyricsResponse.colors = originalLyrics.colors
+        colorLyricsResponse.vocalRemovalColors = originalLyrics.vocalRemovalColors
+    } else {
+        // 应用自定义颜色逻辑
+        let extractedColor = extractColor(from: track)
+        let backgroundColor = calculateBackgroundColor(extractedColor: extractedColor, settings: lyricsColorsSettings)
         
-        var color: Color
+        var colorData = ColorData()
+        colorData.background = backgroundColor.uInt32
+        colorData.text = Color.white.uInt32
+        colorData.highlightText = Color.yellow.uInt32
         
-        if lyricsColorsSettings.useStaticColor {
-            color = Color(hex: lyricsColorsSettings.staticColor)
-        }
-        else if let extractedColor = extractedColor {
-            color = Color(hex: extractedColor)
-                .normalized(lyricsColorsSettings.normalizationFactor)
-        }
-        else if let uiColor = backgroundViewModel?.color() {
-            color = Color(uiColor)
-                .normalized(lyricsColorsSettings.normalizationFactor)
-        }
-        else {
-            color = Color.gray
-        }
-        
-        lyrics.colors = LyricsColors.with {
-            $0.backgroundColor = color.uInt32
-            $0.lineColor = Color.black.uInt32
-            $0.activeLineColor = Color.white.uInt32
-        }
+        colorLyricsResponse.colors = colorData
     }
     
-    return try lyrics.serializedBytes()
+    return try colorLyricsResponse.serializedData()
+}
+
+// 辅助函数
+private func extractColor(from track: AnyObject) -> String? {
+    return switch EeveeSpotify.hookTarget {
+    case .lastAvailableiOS14:
+        track.extractedColorHex()
+    default:
+        track.metadata()["extracted_color"]
+    }
+}
+
+private func calculateBackgroundColor(extractedColor: String?, settings: LyricsColorsSettings) -> Color {
+    var color: Color
+    
+    if settings.useStaticColor {
+        color = Color(hex: settings.staticColor)
+    }
+    else if let extractedColor = extractedColor {
+        color = Color(hex: extractedColor)
+            .normalized(settings.normalizationFactor)
+    }
+    else if let uiColor = nowPlayingScrollViewController?.backgroundViewModel.color() {
+        color = Color(uiColor)
+            .normalized(settings.normalizationFactor)
+    }
+    else {
+        color = Color.gray
+    }
+    
+    return color
 }
