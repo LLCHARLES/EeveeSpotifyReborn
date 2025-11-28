@@ -232,7 +232,13 @@ class LrclibLyricsRepository: LyricsRepository {
         }
 
         if song.instrumental {
-            return LyricsDto(lines: [], timeSynced: false, isSyllableSynced: false)
+            return LyricsDto(
+                lines: [], 
+                timeSynced: false, 
+                isSyllableSynced: false,
+                romanization: nil,  // 添加缺失的参数
+                translation: nil     // 添加缺失的参数
+            )
         }
 
         var lyricsLines: [LyricsLineDto] = []
