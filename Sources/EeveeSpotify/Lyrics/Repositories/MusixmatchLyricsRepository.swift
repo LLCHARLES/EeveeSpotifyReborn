@@ -282,6 +282,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
                         .dropLast()
                         .map { LyricsLineDto(content: $0.lyricsNoteIfEmpty) },
                     timeSynced: false,
+                    isSyllableSynced: false,
                     romanization: lyricsLanguage.isCanBeRomanizedLanguage
                         ? .canBeRomanized : .original
                 )
