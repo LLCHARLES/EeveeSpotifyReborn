@@ -232,7 +232,7 @@ class LrclibLyricsRepository: LyricsRepository {
         }
 
         if song.instrumental {
-            return LyricsDto.instrumental()
+            return LyricsDto(lines: [], timeSynced: false, isSyllableSynced: false)
         }
 
         var lyricsLines: [LyricsLineDto] = []
