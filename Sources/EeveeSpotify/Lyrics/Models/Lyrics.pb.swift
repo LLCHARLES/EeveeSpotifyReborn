@@ -237,9 +237,9 @@ extension LyricsLine: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementatio
 extension ColorData: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "ColorData"
   static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "backgroundColor"),
-    2: .same(proto: "textColor"),
-    3: .same(proto: "highlightTextColor"),
+    1: .same(proto: "background"),
+    2: .same(proto: "text"),
+    3: .same(proto: "highlightText"),
   ]
 
   mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
