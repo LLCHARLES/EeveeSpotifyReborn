@@ -4,6 +4,10 @@ import SwiftUI
 //
 
 struct LyricsGroup: HookGroup { }
+struct BaseLyricsGroup: HookGroup { }
+
+struct LegacyLyricsGroup: HookGroup { }
+struct ModernLyricsGroup: HookGroup { }
 
 var lyricsState = LyricsLoadingState()
 
@@ -14,7 +18,6 @@ private let geniusLyricsRepository = GeniusLyricsRepository()
 private let petitLyricsRepository = PetitLyricsRepository()
 
 //
-
 private func loadCustomLyricsForCurrentTrack() throws -> LyricsDto {
     guard let track = nowPlayingScrollViewController?.loadedTrack else {
         throw LyricsError.noCurrentTrack
