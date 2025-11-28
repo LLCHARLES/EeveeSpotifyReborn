@@ -109,8 +109,8 @@ class PetitLyricsRepository: LyricsRepository {
             return LyricsDto(
                 lines: lyrics.lines.map {
                     LyricsLineDto(
-                        content: $0.linestring,
-                        offsetMs: $0.words.first!.starttime
+                        words: $0.linestring,
+                        startTimeMs: Int64($0.words.first!.starttime)
                     )
                 },
                 timeSynced: true,
@@ -125,7 +125,7 @@ class PetitLyricsRepository: LyricsRepository {
             let lines = stringLyrics.components(separatedBy: "\n")
             
             return LyricsDto(
-                lines: lines.map { LyricsLineDto(content: $0) },
+                lines: lines.map { LyricsLineDto(words: $0) },
                 timeSynced: false,
                 isSyllableSynced: false,
                 romanization: lines.canBeRomanized ? .canBeRomanized : .original
