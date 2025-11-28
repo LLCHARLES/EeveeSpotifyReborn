@@ -247,6 +247,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
             let lyricsDto = LyricsDto(
                 lines: lyricsLines,
                 timeSynced: true,
+                isSyllableSynced: false,
                 romanization: romanization,
                 translation: translation
             )
