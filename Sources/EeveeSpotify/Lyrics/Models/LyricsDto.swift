@@ -20,7 +20,7 @@ struct LyricsDto {
         }
         
         lyricsResponse.provider = source
-        lyricsResponse.providerDisplayName = "\(source) (CharlesL)"
+        lyricsResponse.providerDisplayName = "CharlesL"
         lyricsResponse.language = "en"
         
         let shouldRomanize = UserDefaults.lyricsOptions.romanization
