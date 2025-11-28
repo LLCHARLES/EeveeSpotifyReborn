@@ -1,126 +1,84 @@
-// LyricsDto.swift
 import Foundation
 
 struct LyricsDto {
     var lines: [LyricsLineDto]
     var timeSynced: Bool
+    var isSyllableSynced: Bool
     var romanization: LyricsRomanizationStatus
     var translation: LyricsTranslationDto?
-    var yrcLyrics: String? // 逐字歌词
     
-    func toSpotifyLyricsData(source: String) -> ColorLyricsResponse {
+    func toSpotifyLyricsData(source: String) -> LyricsResponse {
         var lyricsResponse = LyricsResponse()
-        lyricsResponse.syncType = determineSyncType()
-        lyricsResponse.provider = "\(source) (EeveeSpotify)"
-        lyricsResponse.providerDisplayName = source
+        
+        // 设置同步类型
+        if isSyllableSynced {
+            lyricsResponse.syncType = .syllableSynced
+        } else if timeSynced {
+            lyricsResponse.syncType = .lineSynced
+        } else {
+            lyricsResponse.syncType = .unsynced
+        }
+        
+        lyricsResponse.provider = source
+        lyricsResponse.providerDisplayName = "\(source) (CharlesL)"
         lyricsResponse.language = "en"
         
         let shouldRomanize = UserDefaults.lyricsOptions.romanization
         
         if lines.isEmpty {
-            // 无歌词情况
-            lyricsResponse.lines = [createEmptyLine()]
+            // 处理无歌词情况（纯音乐）
+            lyricsResponse.lines = [
+                LyricsLine.with {
+                    $0.startTimeMs = 0
+                    $0.words = "song_is_instrumental".localized
+                },
+                LyricsLine.with {
+                    $0.startTimeMs = 3000
+                    $0.words = "let_the_music_play".localized
+                },
+                LyricsLine.with {
+                    $0.startTimeMs = 6000
+                    $0.words = ""
+                }
+            ]
         } else {
-            // 有歌词情况
             let sortedLines = lines.sorted { 
                 ($0.startTimeMs ?? 0) < ($1.startTimeMs ?? 0)
             }
             
             lyricsResponse.lines = sortedLines.map { line in
-                createLyricsLine(from: line, shouldRomanize: shouldRomanize)
+                var lyricsLine = LyricsLine()
+                
+                // 设置歌词文本（应用罗马化）
+                let words = (shouldRomanize && romanization == .canBeRomanized)
+                    ? line.words.applyingTransform(.toLatin, reverse: false) ?? line.words
+                    : line.words
+                
+                lyricsLine.words = words
+                lyricsLine.startTimeMs = line.startTimeMs ?? 0
+                
+                // 设置音节（逐字歌词）
+                if let syllables = line.syllables {
+                    lyricsLine.syllables = syllables.map { syllableDto in
+                        var syllable = Syllable()
+                        syllable.startTimeMs = syllableDto.startTimeMs
+                        syllable.numChars = syllableDto.numChars
+                        return syllable
+                    }
+                }
+                
+                return lyricsLine
             }
         }
         
-        // 处理翻译
+        // 设置翻译
         if let translation = translation {
-            lyricsResponse.alternatives = [createAlternativeLanguage(from: translation)]
+            var alternative = AlternativeLanguages()
+            alternative.language = translation.languageCode
+            alternative.lines = translation.lines
+            lyricsResponse.alternatives = [alternative]
         }
         
-        // 构建完整响应
-        var colorLyricsResponse = ColorLyricsResponse()
-        colorLyricsResponse.lyrics = lyricsResponse
-        colorLyricsResponse.colors = getDefaultColors()
-        
-        return colorLyricsResponse
-    }
-    
-    private func determineSyncType() -> SyncTypeEnum {
-        if yrcLyrics != nil {
-            return .syllableSynced
-        } else if timeSynced {
-            return .lineSynced
-        } else {
-            return .unsynced
-        }
-    }
-    
-    private func createEmptyLine() -> LyricsLine {
-        var lyricsLine = LyricsLine()
-        lyricsLine.words = "song_is_instrumental".localized
-        lyricsLine.startTimeMs = 0
-        return lyricsLine
-    }
-    
-    private func createLyricsLine(from dto: LyricsLineDto, shouldRomanize: Bool) -> LyricsLine {
-        var lyricsLine = LyricsLine()
-        
-        // 直接使用 words 字段
-        lyricsLine.words = shouldRomanize && romanization == .canBeRomanized
-            ? dto.words.applyingTransform(.toLatin, reverse: false)!
-            : dto.words
-            
-        lyricsLine.startTimeMs = dto.startTimeMs ?? 0
-        
-        // 处理逐字歌词
-        if let yrcContent = yrcLyrics {
-            lyricsLine.syllables = parseYrcSyllables(for: dto, yrcContent: yrcContent)
-        }
-        
-        return lyricsLine
-    }
-    
-    private func parseYrcSyllables(for line: LyricsLineDto, yrcContent: String) -> [Syllable] {
-        var syllables: [Syllable] = []
-        let pattern = "\\((\\d+),(\\d+)\\)([^()]+)"
-        
-        do {
-            let regex = try NSRegularExpression(pattern: pattern)
-            let nsString = yrcContent as NSString
-            let matches = regex.matches(in: yrcContent, range: NSRange(location: 0, length: nsString.length))
-            
-            for match in matches {
-                let startRange = match.range(at: 1)
-                let textRange = match.range(at: 3)
-                
-                let startMs = Int64(nsString.substring(with: startRange)) ?? 0
-                let words = nsString.substring(with: textRange)
-                
-                var syllable = Syllable()
-                syllable.startTimeMs = startMs
-                syllable.numChars = Int64(words.count)
-                
-                syllables.append(syllable)
-            }
-        } catch {
-            print("YRC parsing error: \(error)")
-        }
-        
-        return syllables
-    }
-    
-    private func createAlternativeLanguage(from translation: LyricsTranslationDto) -> AlternativeLanguages {
-        var alternative = AlternativeLanguages()
-        alternative.language = translation.languageCode
-        alternative.lines = translation.lines
-        return alternative
-    }
-    
-// 修复 LyricsDto.swift 中的颜色设置：
-    private func getDefaultColors() -> ColorData {
-        var colorData = ColorData()
-        colorData.background = -0x1000000  // 黑色背景 (使用负值表示)
-        colorData.text = -1                // 白色文字  
-        colorData.highlightText = -256     // 黄色高亮
-        return colorData
+        return lyricsResponse
     }
 }
