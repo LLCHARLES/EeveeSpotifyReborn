@@ -9,23 +9,21 @@ struct LyricsDto {
     var yrcLyrics: String? // 逐字歌词
     
     func toSpotifyLyricsData(source: String) -> ColorLyricsResponse {
-        var lyricsResponse = LyricsResponse.with {
-            $0.syncType = determineSyncType()
-            $0.provider = "\(source) (EeveeSpotify)"
-            $0.providerDisplayName = source
-            $0.language = "en"
-        }
+        var lyricsResponse = LyricsResponse()
+        lyricsResponse.syncType = determineSyncType()
+        lyricsResponse.provider = "\(source) (EeveeSpotify)"
+        lyricsResponse.providerDisplayName = source
+        lyricsResponse.language = "en"
         
         let shouldRomanize = UserDefaults.lyricsOptions.romanization
         
         if lines.isEmpty {
             // 无歌词情况
-            lyricsResponse.lines = [
-                LyricsLine.with {
-                    $0.words = "song_is_instrumental".localized
-                    $0.startTimeMs = 0
-                }
-            ]
+            let emptyLine = LyricsLine.with {
+                $0.words = "song_is_instrumental".localized
+                $0.startTimeMs = 0
+            }
+            lyricsResponse.lines = [emptyLine]
         } else {
             // 有歌词情况
             let sortedLines = lines.sorted { 
@@ -33,12 +31,11 @@ struct LyricsDto {
             }
             
             lyricsResponse.lines = sortedLines.map { line in
-                var lyricsLine = LyricsLine.with {
-                    $0.words = (shouldRomanize && romanization == .canBeRomanized)
-                        ? line.content.applyingTransform(.toLatin, reverse: false)!
-                        : line.content
-                    $0.startTimeMs = Int64(line.offsetMs ?? 0)
-                }
+                var lyricsLine = LyricsLine()
+                lyricsLine.words = (shouldRomanize && romanization == .canBeRomanized)
+                    ? line.content.applyingTransform(.toLatin, reverse: false)!
+                    : line.content
+                lyricsLine.startTimeMs = Int64(line.offsetMs ?? 0)
                 
                 // 处理逐字歌词
                 if let yrcContent = yrcLyrics {
@@ -51,18 +48,18 @@ struct LyricsDto {
         
         // 处理翻译
         if let translation = translation {
-            let alternative = AlternativeLanguages.with {
-                $0.language = translation.languageCode
-                $0.lines = translation.lines
-            }
+            var alternative = AlternativeLanguages()
+            alternative.language = translation.languageCode
+            alternative.lines = translation.lines
             lyricsResponse.alternatives = [alternative]
         }
         
         // 构建完整响应
-        return ColorLyricsResponse.with {
-            $0.lyrics = lyricsResponse
-            $0.colors = getDefaultColors()
-        }
+        var colorLyricsResponse = ColorLyricsResponse()
+        colorLyricsResponse.lyrics = lyricsResponse
+        colorLyricsResponse.colors = getDefaultColors()
+        
+        return colorLyricsResponse
     }
     
     private func determineSyncType() -> SyncTypeEnum {
@@ -94,10 +91,9 @@ struct LyricsDto {
                 let startMs = Int(nsString.substring(with: startRange)) ?? 0
                 let text = nsString.substring(with: textRange)
                 
-                let syllable = Syllable.with {
-                    $0.startTimeMs = Int64(startMs)
-                    $0.numChars = Int64(text.count)
-                }
+                var syllable = Syllable()
+                syllable.startTimeMs = Int64(startMs)
+                syllable.numChars = Int64(text.count)
                 
                 syllables.append(syllable)
             }
@@ -109,10 +105,27 @@ struct LyricsDto {
     }
     
     private func getDefaultColors() -> ColorData {
-        return ColorData.with {
-            $0.background = 0xFF000000  // 黑色背景
-            $0.text = 0xFFFFFFFF        // 白色文字
-            $0.highlightText = 0xFFFFFF00 // 黄色高亮
-        }
+        var colorData = ColorData()
+        colorData.background = 0xFF000000  // 黑色背景
+        colorData.text = 0xFFFFFFFF        // 白色文字
+        colorData.highlightText = 0xFFFFFF00 // 黄色高亮
+        return colorData
+    }
+}
+
+// 为 SwiftProtobuf 结构添加便捷构造器
+extension LyricsLine {
+    static func with(_ block: (inout LyricsLine) -> Void) -> LyricsLine {
+        var message = LyricsLine()
+        block(&message)
+        return message
+    }
+}
+
+extension Syllable {
+    static func with(_ block: (inout Syllable) -> Void) -> Syllable {
+        var message = Syllable()
+        block(&message)
+        return message
     }
 }
