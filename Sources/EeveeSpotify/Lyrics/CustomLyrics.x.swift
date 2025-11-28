@@ -14,6 +14,15 @@ var hasShownUnauthorizedPopUp = false
 private let geniusLyricsRepository = GeniusLyricsRepository()
 private let petitLyricsRepository = PetitLyricsRepository()
 
+// 添加颜色转换扩展
+extension Color {
+    var int32Value: Int32 {
+        // 将 UInt32 颜色值转换为 Int32
+        // 由于颜色值通常不会超过 Int32.max，直接转换是安全的
+        return Int32(bitPattern: self.uInt32)
+    }
+}
+
 private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
     guard
         let track = statefulPlayer?.currentTrack() ??
@@ -161,9 +170,10 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: ColorL
         }
         
         var colorData = ColorData()
-        colorData.background = color.uInt32
-        colorData.text = Color.black.uInt32
-        colorData.highlightText = Color.white.uInt32
+        // 使用新的 int32Value 扩展来转换颜色值
+        colorData.background = color.int32Value
+        colorData.text = Color.black.int32Value
+        colorData.highlightText = Color.white.int32Value
         
         colorLyricsResponse.colors = colorData
     }
