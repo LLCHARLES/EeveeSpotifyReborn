@@ -15,7 +15,7 @@ class LrclibLyricsRepository: LyricsRepository {
         session = URLSession(configuration: configuration)
     }
     
-    static let originalApiUrl = "https://lrclib.net/api"
+    static let originalApiUrl = "https://qqmusic-lyrics-api.zeabur.app/api"
     
     static let shared = LrclibLyricsRepository(
         apiUrl: UserDefaults.lyricsOptions.lrclibUrl
@@ -81,18 +81,19 @@ class LrclibLyricsRepository: LyricsRepository {
                 let minute = Int(nsString.substring(with: minuteRange)) ?? 0
                 let second = Int(nsString.substring(with: secondRange)) ?? 0
                 let millisecond = Int(nsString.substring(with: millisecondRange)) ?? 0
-                let words = nsString.substring(with: textRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                let text = nsString.substring(with: textRange).trimmingCharacters(in: .whitespacesAndNewlines)
                 
                 // 跳过元数据行（包含标签的行）
-                if words.hasPrefix("[") && words.contains("]") {
+                if text.hasPrefix("[") && text.contains("]") {
                     continue
                 }
                 
                 let totalMs = (minute * 60 + second) * 1000 + millisecond * 10
                 
                 lines.append(LyricsLineDto(
-                    words: words,
-                    startTimeMs: Int64(totalMs)
+                    words: text,
+                    startTimeMs: Int64(totalMs),
+                    syllables: nil
                 ))
             }
             
@@ -106,50 +107,62 @@ class LrclibLyricsRepository: LyricsRepository {
         return lines
     }
     
-    // 解析逐字歌词格式 (YRC)
+    // 解析逐字歌词 (YRC格式)
     private func parseYrcLyrics(_ yrcContent: String) -> [LyricsLineDto] {
         var lines: [LyricsLineDto] = []
-        let linePattern = "\\[(\\d+),(\\d+)\\](.*)"
         
-        do {
-            let lineRegex = try NSRegularExpression(pattern: linePattern)
-            let nsString = yrcContent as NSString
-            let lineMatches = lineRegex.matches(in: yrcContent, range: NSRange(location: 0, length: nsString.length))
+        // 按行分割
+        let lineStrings = yrcContent.components(separatedBy: "\n")
+        
+        for lineString in lineStrings {
+            // 匹配整行时间戳格式: [start,duration]
+            let linePattern = #"\[(\d+),(\d+)\](.*)"#
             
-            for lineMatch in lineMatches {
-                let lineStartRange = lineMatch.range(at: 1)
-                let lineContentRange = lineMatch.range(at: 3)
-                
-                let lineStartMs = Int64(nsString.substring(with: lineStartRange)) ?? 0
-                let lineContent = nsString.substring(with: lineContentRange)
-                
-                // 提取整行文本（去除时间戳）
-                let wordsPattern = "\\((\\d+),(\\d+)\\)([^()]+)"
-                let wordsRegex = try NSRegularExpression(pattern: wordsPattern)
-                let wordMatches = wordsRegex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
-                
-                var lineWords = ""
-                for (index, match) in wordMatches.enumerated() {
-                    let textRange = match.range(at: 3)
-                    let word = nsString.substring(with: textRange)
-                    lineWords += word
-                    if index < wordMatches.count - 1 {
-                        lineWords += " "
-                    }
-                }
-                
-                lines.append(LyricsLineDto(
-                    words: lineWords.trimmingCharacters(in: .whitespacesAndNewlines),
-                    startTimeMs: lineStartMs
-                ))
+            guard let lineMatch = lineString.range(of: linePattern, options: .regularExpression) else {
+                continue
             }
             
-            // 按时间排序
-            lines.sort { ($0.startTimeMs ?? 0) < ($1.startTimeMs ?? 0) }
+            let nsString = lineString as NSString
+            let lineStartMs = Int(nsString.substring(with: NSRange(lineMatch.range(at: 1), in: lineString))) ?? 0
+            let lineContent = nsString.substring(with: NSRange(lineMatch.range(at: 3), in: lineString))
             
-        } catch {
-            print("YRC line parsing error: \(error)")
+            var syllables: [SyllableDto] = []
+            var fullLineText = ""
+            
+            // 匹配单词和时间戳格式: (start,duration)word
+            let wordPattern = #"\((\d+),(\d+)\)([^\(\)]*)"#
+            
+            do {
+                let regex = try NSRegularExpression(pattern: wordPattern)
+                let matches = regex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
+                
+                for match in matches {
+                    let wordStartMs = Int64(nsString.substring(with: NSRange(match.range(at: 1), in: lineContent))) ?? 0
+                    let wordText = nsString.substring(with: NSRange(match.range(at: 3), in: lineContent))
+                    
+                    fullLineText += wordText
+                    
+                    let syllable = SyllableDto(
+                        startTimeMs: wordStartMs,
+                        numChars: Int64(wordText.count)
+                    )
+                    syllables.append(syllable)
+                }
+            } catch {
+                print("YRC word parsing error: \(error)")
+                continue
+            }
+            
+            let lineDto = LyricsLineDto(
+                words: fullLineText,
+                startTimeMs: Int64(lineStartMs),
+                syllables: syllables.isEmpty ? nil : syllables
+            )
+            lines.append(lineDto)
         }
+        
+        // 按时间排序
+        lines.sort { ($0.startTimeMs ?? 0) < ($1.startTimeMs ?? 0) }
         
         return lines
     }
@@ -159,7 +172,7 @@ class LrclibLyricsRepository: LyricsRepository {
         return plainLyrics
             .components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map { LyricsLineDto(words: $0) }
+            .map { LyricsLineDto(words: $0, startTimeMs: nil, syllables: nil) }
     }
     
     // 对齐翻译歌词和原歌词
@@ -209,37 +222,39 @@ class LrclibLyricsRepository: LyricsRepository {
             return LyricsDto(
                 lines: [],
                 timeSynced: false,
+                isSyllableSynced: false,
                 romanization: .original
             )
         }
 
         var lyricsLines: [LyricsLineDto] = []
         var timeSynced = false
+        var isSyllableSynced = false
         var translation: LyricsTranslationDto? = nil
-        var yrcLyrics: String? = nil
         
         // 优先使用逐字歌词 (yrcLyrics)
-        if let yrcLyricsContent = song.yrcLyrics, !yrcLyricsContent.isEmpty {
-            lyricsLines = parseYrcLyrics(yrcLyricsContent)
+        if let yrcLyrics = song.yrcLyrics, !yrcLyrics.isEmpty {
+            lyricsLines = parseYrcLyrics(yrcLyrics)
             timeSynced = true
-            yrcLyrics = yrcLyricsContent
+            isSyllableSynced = true
         }
         // 其次使用时间轴歌词 (syncedLyrics)
         else if let syncedLyrics = song.syncedLyrics, !syncedLyrics.isEmpty {
             lyricsLines = parseLrcLyrics(syncedLyrics)
             timeSynced = true
-        } 
+        }
         // 最后使用纯文本歌词 (plainLyrics)
         else if let plainLyrics = song.plainLyrics, !plainLyrics.isEmpty {
             lyricsLines = parsePlainLyrics(plainLyrics)
             timeSynced = false
-        } else {
-            throw LyricsError.noSuchSong
         }
         
-        // 处理翻译歌词
+        // 处理翻译歌词 - 使用对齐方法
         if let translatedLyrics = song.translatedLyrics, !translatedLyrics.isEmpty {
+            // 解析翻译歌词，不过滤任何内容
             let translationLines = parseLrcLyrics(translatedLyrics)
+            
+            // 使用时间戳对齐翻译和原歌词
             let alignedTranslations = alignTranslations(
                 originalLines: lyricsLines,
                 translationLines: translationLines
@@ -263,9 +278,9 @@ class LrclibLyricsRepository: LyricsRepository {
         return LyricsDto(
             lines: lyricsLines,
             timeSynced: timeSynced,
+            isSyllableSynced: isSyllableSynced,
             romanization: romanization,
-            translation: translation,
-            yrcLyrics: yrcLyrics
+            translation: translation
         )
     }
 }
