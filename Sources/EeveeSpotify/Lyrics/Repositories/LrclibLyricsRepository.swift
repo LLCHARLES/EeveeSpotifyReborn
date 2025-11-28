@@ -101,7 +101,6 @@ class LrclibLyricsRepository: LyricsRepository {
             lines.sort { ($0.startTimeMs ?? 0) < ($1.startTimeMs ?? 0) }
             
         } catch {
-            print("LRC parsing error: \(error)")
         }
         
         return lines
@@ -115,7 +114,7 @@ class LrclibLyricsRepository: LyricsRepository {
         let lineStrings = yrcContent.components(separatedBy: "\n")
         
         for lineString in lineStrings {
-            // 匹配整行时间戳格式: [start,duration]
+            // 匹配整行时间戳格式: [start,duration]后面跟着内容
             let linePattern = #"\[(\d+),(\d+)\](.*)"#
             
             do {
@@ -134,8 +133,8 @@ class LrclibLyricsRepository: LyricsRepository {
                 var syllables: [SyllableDto] = []
                 var fullLineText = ""
                 
-                // 匹配单词和时间戳格式: (start,duration)word
-                let wordPattern = #"\((\d+),(\d+)\)([^\(\)]*)"#
+                // 匹配 "单词 (start,duration)" 模式
+                let wordPattern = #"([^\(\)]+?)\((\d+),(\d+)\)"#
                 
                 do {
                     let wordRegex = try NSRegularExpression(pattern: wordPattern)
@@ -143,11 +142,17 @@ class LrclibLyricsRepository: LyricsRepository {
                     let nsLineContent = lineContent as NSString
                     
                     for wordMatch in wordMatches {
-                        let wordStartMsRange = wordMatch.range(at: 1)
-                        let wordTextRange = wordMatch.range(at: 3)
+                        let wordTextRange = wordMatch.range(at: 1)
+                        let wordStartMsRange = wordMatch.range(at: 2)
+                        let wordDurationRange = wordMatch.range(at: 3)
                         
+                        let wordText = nsLineContent.substring(with: wordTextRange).trimmingCharacters(in: .whitespacesAndNewlines)
                         let wordStartMs = Int64(nsLineContent.substring(with: wordStartMsRange)) ?? 0
-                        let wordText = nsLineContent.substring(with: wordTextRange)
+                        
+                        // 跳过空文本
+                        if wordText.isEmpty {
+                            continue
+                        }
                         
                         fullLineText += wordText
                         
@@ -158,18 +163,19 @@ class LrclibLyricsRepository: LyricsRepository {
                         syllables.append(syllable)
                     }
                 } catch {
-                    print("YRC word parsing error: \(error)")
                     continue
                 }
                 
-                let lineDto = LyricsLineDto(
-                    words: fullLineText,
-                    startTimeMs: Int64(lineStartMs),
-                    syllables: syllables.isEmpty ? nil : syllables
-                )
-                lines.append(lineDto)
+                // 只有当有实际内容时才添加这一行
+                if !fullLineText.isEmpty {
+                    let lineDto = LyricsLineDto(
+                        words: fullLineText,
+                        startTimeMs: Int64(lineStartMs),
+                        syllables: syllables.isEmpty ? nil : syllables
+                    )
+                    lines.append(lineDto)
+                }
             } catch {
-                print("YRC line parsing error: \(error)")
                 continue
             }
         }
@@ -236,8 +242,8 @@ class LrclibLyricsRepository: LyricsRepository {
                 lines: [], 
                 timeSynced: false, 
                 isSyllableSynced: false,
-                romanization: .original,  // 添加缺失的参数
-                translation: nil     // 添加缺失的参数
+                romanization: .original,
+                translation: nil
             )
         }
 
