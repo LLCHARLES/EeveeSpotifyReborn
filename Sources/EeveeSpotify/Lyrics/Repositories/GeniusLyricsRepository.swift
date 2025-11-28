@@ -155,6 +155,7 @@ class GeniusLyricsRepository: LyricsRepository {
         return LyricsDto(
             lines: mapLyricsLines(plainLines).map { line in LyricsLineDto(content: line) },
             timeSynced: false,
+            isSyllableSynced: false,
             romanization: romanization
         )
     }
