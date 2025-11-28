@@ -184,15 +184,15 @@ class MusixmatchLyricsRepository: LyricsRepository {
 
             var lyricsLines = subtitles.dropLast().map { subtitle in
                 LyricsLineDto(
-                    content: subtitle.text.lyricsNoteIfEmpty,
-                    offsetMs: Int(subtitle.time.total * 1000)
+                    words: subtitle.text.lyricsNoteIfEmpty,
+                    startTimeMs: Int64(subtitle.time.total * 1000)
                 )
             }
 
             lyricsLines.append(
                 LyricsLineDto(
-                    content: "",
-                    offsetMs: Int(subtitles.last!.time.total * 1000)
+                    words: "",
+                    startTimeMs: Int64(subtitles.last!.time.total * 1000)
                 )
             )
 
