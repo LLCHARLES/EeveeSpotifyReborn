@@ -81,12 +81,7 @@ class LrclibLyricsRepository: LyricsRepository {
                 let minute = Int(nsString.substring(with: minuteRange)) ?? 0
                 let second = Int(nsString.substring(with: secondRange)) ?? 0
                 let millisecond = Int(nsString.substring(with: millisecondRange)) ?? 0
-                let text = nsString.substring(with: textRange).trimmingCharacters(in: .whitespacesAndNewlines)
-                
-                // 跳过元数据行（包含标签的行）
-                if text.hasPrefix("[") && text.contains("]") {
-                    continue
-                }
+                let text = nsString.substring(with: textRange)
                 
                 let totalMs = (minute * 60 + second) * 1000 + millisecond * 10
                 
@@ -144,15 +139,9 @@ class LrclibLyricsRepository: LyricsRepository {
                     for wordMatch in wordMatches {
                         let wordTextRange = wordMatch.range(at: 1)
                         let wordStartMsRange = wordMatch.range(at: 2)
-                        let wordDurationRange = wordMatch.range(at: 3)
                         
-                        let wordText = nsLineContent.substring(with: wordTextRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let wordText = nsLineContent.substring(with: wordTextRange)
                         let wordStartMs = Int64(nsLineContent.substring(with: wordStartMsRange)) ?? 0
-                        
-                        // 跳过空文本
-                        if wordText.isEmpty {
-                            continue
-                        }
                         
                         fullLineText += wordText
                         
@@ -166,15 +155,12 @@ class LrclibLyricsRepository: LyricsRepository {
                     continue
                 }
                 
-                // 只有当有实际内容时才添加这一行
-                if !fullLineText.isEmpty {
-                    let lineDto = LyricsLineDto(
-                        words: fullLineText,
-                        startTimeMs: Int64(lineStartMs),
-                        syllables: syllables.isEmpty ? nil : syllables
-                    )
-                    lines.append(lineDto)
-                }
+                let lineDto = LyricsLineDto(
+                    words: fullLineText,
+                    startTimeMs: Int64(lineStartMs),
+                    syllables: syllables.isEmpty ? nil : syllables
+                )
+                lines.append(lineDto)
             } catch {
                 continue
             }
@@ -190,7 +176,6 @@ class LrclibLyricsRepository: LyricsRepository {
     private func parsePlainLyrics(_ plainLyrics: String) -> [LyricsLineDto] {
         return plainLyrics
             .components(separatedBy: "\n")
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map { LyricsLineDto(words: $0, startTimeMs: nil, syllables: nil) }
     }
     
@@ -214,8 +199,7 @@ class LrclibLyricsRepository: LyricsRepository {
                 }
             }
             
-            // 如果时间差在合理范围内（比如2秒内），就认为是匹配的
-            if closestIndex >= 0 && minTimeDiff <= 2000 && closestIndex < alignedTranslations.count {
+            if closestIndex >= 0 && closestIndex < alignedTranslations.count {
                 alignedTranslations[closestIndex] = translation.words
             }
         }
@@ -271,7 +255,7 @@ class LrclibLyricsRepository: LyricsRepository {
         
         // 处理翻译歌词 - 使用对齐方法
         if let translatedLyrics = song.translatedLyrics, !translatedLyrics.isEmpty {
-            // 解析翻译歌词，不过滤任何内容
+            // 解析翻译歌词
             let translationLines = parseLrcLyrics(translatedLyrics)
             
             // 使用时间戳对齐翻译和原歌词
