@@ -102,84 +102,84 @@ class LrclibLyricsRepository: LyricsRepository {
     }
     
     // 解析逐字歌词 (YRC格式)
-private func parseYrcLyrics(_ yrcContent: String) -> [LyricsLineDto] {
-    var lines: [LyricsLineDto] = []
-    
-    // 按行分割
-    let lineStrings = yrcContent.components(separatedBy: "\n")
-    
-    for lineString in lineStrings {
-        // 匹配整行时间戳格式: [start,duration]后面跟着内容
-        let linePattern = #"\[(\d+),(\d+)\](.*)"#
+    private func parseYrcLyrics(_ yrcContent: String) -> [LyricsLineDto] {
+        var lines: [LyricsLineDto] = []
         
-        do {
-            let regex = try NSRegularExpression(pattern: linePattern)
-            let nsString = lineString as NSString
-            let matches = regex.matches(in: lineString, range: NSRange(location: 0, length: nsString.length))
-            
-            guard let match = matches.first else { continue }
-            
-            let lineStartMsRange = match.range(at: 1)
-            let lineContentRange = match.range(at: 3)
-            
-            let lineStartMs = Int(nsString.substring(with: lineStartMsRange)) ?? 0
-            let lineContent = nsString.substring(with: lineContentRange)
-            
-            var syllables: [SyllableDto] = []
-            var fullLineText = ""
-            
-            // 匹配 "单词 (start,duration)" 模式，处理被额外括号包围的情况
-            let wordPattern = #"(?:\(*([^\(\)]+?)\)*)?\((\d+),(\d+)\)"#
+        // 按行分割
+        let lineStrings = yrcContent.components(separatedBy: "\n")
+        
+        for lineString in lineStrings {
+            // 匹配整行时间戳格式: [start,duration]后面跟着内容
+            let linePattern = #"\[(\d+),(\d+)\](.*)"#
             
             do {
-                let wordRegex = try NSRegularExpression(pattern: wordPattern)
-                let wordMatches = wordRegex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
-                let nsLineContent = lineContent as NSString
+                let regex = try NSRegularExpression(pattern: linePattern)
+                let nsString = lineString as NSString
+                let matches = regex.matches(in: lineString, range: NSRange(location: 0, length: nsString.length))
                 
-                for wordMatch in wordMatches {
-                    let wordTextRange = wordMatch.range(at: 1)
-                    let wordStartMsRange = wordMatch.range(at: 2)
+                guard let match = matches.first else { continue }
+                
+                let lineStartMsRange = match.range(at: 1)
+                let lineContentRange = match.range(at: 3)
+                
+                let lineStartMs = Int(nsString.substring(with: lineStartMsRange)) ?? 0
+                let lineContent = nsString.substring(with: lineContentRange)
+                
+                var syllables: [SyllableDto] = []
+                var fullLineText = ""
+                
+                // 匹配 "单词 (start,duration)" 模式，处理被额外括号包围的情况
+                let wordPattern = #"(?:\(*([^\(\)]+?)\)*)?\((\d+),(\d+)\)"#
+                
+                do {
+                    let wordRegex = try NSRegularExpression(pattern: wordPattern)
+                    let wordMatches = wordRegex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
+                    let nsLineContent = lineContent as NSString
                     
-                    let wordStartMs = Int64(nsLineContent.substring(with: wordStartMsRange)) ?? 0
-                    
-                    // 如果找到单词文本，处理可能的额外括号
-                    if wordTextRange.location != NSNotFound {
-                        var wordText = nsLineContent.substring(with: wordTextRange)
+                    for wordMatch in wordMatches {
+                        let wordTextRange = wordMatch.range(at: 1)
+                        let wordStartMsRange = wordMatch.range(at: 2)
                         
-                        // 如果单词被额外括号包围，添加括号使其显示为(单词)
-                        if lineContent.contains("(\(wordText))") || lineContent.contains("((\(wordStartMs),") {
-                            wordText = "(\(wordText))"
+                        let wordStartMs = Int64(nsLineContent.substring(with: wordStartMsRange)) ?? 0
+                        
+                        // 如果找到单词文本，处理可能的额外括号
+                        if wordTextRange.location != NSNotFound {
+                            var wordText = nsLineContent.substring(with: wordTextRange)
+                            
+                            // 如果单词被额外括号包围，添加括号使其显示为(单词)
+                            if lineContent.contains("(\(wordText))") || lineContent.contains("((\(wordStartMs),") {
+                                wordText = "(\(wordText))"
+                            }
+                            
+                            fullLineText += wordText
+                            
+                            let syllable = SyllableDto(
+                                startTimeMs: wordStartMs,
+                                numChars: Int64(wordText.count)
+                            )
+                            syllables.append(syllable)
                         }
-                        
-                        fullLineText += wordText
-                        
-                        let syllable = SyllableDto(
-                            startTimeMs: wordStartMs,
-                            numChars: Int64(wordText.count)
-                        )
-                        syllables.append(syllable)
                     }
+                } catch {
+                    continue
                 }
+                
+                let lineDto = LyricsLineDto(
+                    words: fullLineText,
+                    startTimeMs: Int64(lineStartMs),
+                    syllables: syllables.isEmpty ? nil : syllables
+                )
+                lines.append(lineDto)
             } catch {
                 continue
             }
-            
-            let lineDto = LyricsLineDto(
-                words: fullLineText,
-                startTimeMs: Int64(lineStartMs),
-                syllables: syllables.isEmpty ? nil : syllables
-            )
-            lines.append(lineDto)
-        } catch {
-            continue
         }
+        
+        // 按时间排序
+        lines.sort { ($0.startTimeMs ?? 0) < ($1.startTimeMs ?? 0) }
+        
+        return lines
     }
-    
-    // 按时间排序
-    lines.sort { ($0.startTimeMs ?? 0) < ($1.startTimeMs ?? 0) }
-    
-    return lines
-}
     
     // 解析纯文本歌词
     private func parsePlainLyrics(_ plainLyrics: String) -> [LyricsLineDto] {
