@@ -128,55 +128,34 @@ class LrclibLyricsRepository: LyricsRepository {
                 var syllables: [SyllableDto] = []
                 var fullLineText = ""
                 
-                // 处理特殊格式: ((时间戳)单词)
-                let specialPattern = #"\(\((\d+),(\d+)\)([^\(\)]+)\)"#
-                let specialRegex = try NSRegularExpression(pattern: specialPattern)
-                let specialMatches = specialRegex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
+                // 使用一个正则表达式匹配所有情况
+                let wordPattern = #"(?:\(\((\d+),(\d+)\))?([^\(\)]*?)(?:\))?\((\d+),(\d+)\)"#
+                let wordRegex = try NSRegularExpression(pattern: wordPattern)
+                let wordMatches = wordRegex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
                 
-                if !specialMatches.isEmpty {
-                    // 处理特殊格式
-                    for specialMatch in specialMatches {
-                        let wordRange = specialMatch.range(at: 3)
-                        let wordStartMsRange = specialMatch.range(at: 1)
-                        
-                        let wordText = "(\(nsString.substring(with: wordRange)))"
-                        let wordStartMs = Int64(nsString.substring(with: wordStartMsRange)) ?? 0
-                        
-                        fullLineText += wordText
-                        
-                        let syllable = SyllableDto(
-                            startTimeMs: wordStartMs,
-                            numChars: Int64(wordText.count)
-                        )
-                        syllables.append(syllable)
-                    }
-                } else {
-                    // 正常格式: 单词(时间戳)
-                    let wordPattern = #"([^\(\)]+?)\((\d+),(\d+)\)"#
+                for wordMatch in wordMatches {
+                    let specialStartMsRange = wordMatch.range(at: 1)
+                    let wordTextRange = wordMatch.range(at: 2)
+                    let normalStartMsRange = wordMatch.range(at: 3)
                     
-                    do {
-                        let wordRegex = try NSRegularExpression(pattern: wordPattern)
-                        let wordMatches = wordRegex.matches(in: lineContent, range: NSRange(location: 0, length: lineContent.count))
-                        let nsLineContent = lineContent as NSString
-                        
-                        for wordMatch in wordMatches {
-                            let wordTextRange = wordMatch.range(at: 1)
-                            let wordStartMsRange = wordMatch.range(at: 2)
-                            
-                            let wordText = nsLineContent.substring(with: wordTextRange)
-                            let wordStartMs = Int64(nsLineContent.substring(with: wordStartMsRange)) ?? 0
-                            
-                            fullLineText += wordText
-                            
-                            let syllable = SyllableDto(
-                                startTimeMs: wordStartMs,
-                                numChars: Int64(wordText.count)
-                            )
-                            syllables.append(syllable)
-                        }
-                    } catch {
-                        continue
+                    let wordText = nsString.substring(with: wordTextRange)
+                    let wordStartMs: Int64
+                    
+                    // 确定使用哪个时间戳
+                    if specialStartMsRange.location != NSNotFound {
+                        wordStartMs = Int64(nsString.substring(with: specialStartMsRange)) ?? 0
+                        // 特殊格式：添加括号
+                        fullLineText += "(\(wordText))"
+                    } else {
+                        wordStartMs = Int64(nsString.substring(with: normalStartMsRange)) ?? 0
+                        fullLineText += wordText
                     }
+                    
+                    let syllable = SyllableDto(
+                        startTimeMs: wordStartMs,
+                        numChars: Int64(wordText.count)
+                    )
+                    syllables.append(syllable)
                 }
                 
                 let lineDto = LyricsLineDto(
