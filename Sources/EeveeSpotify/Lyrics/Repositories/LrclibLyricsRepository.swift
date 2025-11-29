@@ -109,13 +109,32 @@ class LrclibLyricsRepository: LyricsRepository {
         let lineStrings = yrcContent.components(separatedBy: "\n")
         
         for lineString in lineStrings {
+            // 预处理：将 ((时间戳)单词) 替换为 (单词)
+            var processedLine = lineString
+            let preprocessPattern = #"\(\((\d+),(\d+)\)([^\(\)]+)\)"#
+            
+            do {
+                let preprocessRegex = try NSRegularExpression(pattern: preprocessPattern)
+                let nsString = processedLine as NSString
+                let matches = preprocessRegex.matches(in: processedLine, range: NSRange(location: 0, length: nsString.length))
+                
+                for match in matches.reversed() { // 反向遍历以便替换不影响后续索引
+                    let wordRange = match.range(at: 3)
+                    let word = nsString.substring(with: wordRange)
+                    let replacement = "(\(word))"
+                    processedLine = (processedLine as NSString).replacingCharacters(in: match.range, with: replacement)
+                }
+            } catch {
+                // 如果预处理失败，继续使用原始行
+            }
+            
             // 匹配整行时间戳格式: [start,duration]后面跟着内容
             let linePattern = #"\[(\d+),(\d+)\](.*)"#
             
             do {
                 let regex = try NSRegularExpression(pattern: linePattern)
-                let nsString = lineString as NSString
-                let matches = regex.matches(in: lineString, range: NSRange(location: 0, length: nsString.length))
+                let nsString = processedLine as NSString
+                let matches = regex.matches(in: processedLine, range: NSRange(location: 0, length: nsString.length))
                 
                 guard let match = matches.first else { continue }
                 
@@ -128,8 +147,8 @@ class LrclibLyricsRepository: LyricsRepository {
                 var syllables: [SyllableDto] = []
                 var fullLineText = ""
                 
-                // 匹配 "单词 (start,duration)" 模式，处理被额外括号包围的情况
-                let wordPattern = #"(?:\(*([^\(\)]+?)\)*)?\((\d+),(\d+)\)"#
+                // 匹配 "单词 (start,duration)" 模式
+                let wordPattern = #"([^\(\)]+?)\((\d+),(\d+)\)"#
                 
                 do {
                     let wordRegex = try NSRegularExpression(pattern: wordPattern)
@@ -140,25 +159,16 @@ class LrclibLyricsRepository: LyricsRepository {
                         let wordTextRange = wordMatch.range(at: 1)
                         let wordStartMsRange = wordMatch.range(at: 2)
                         
+                        let wordText = nsLineContent.substring(with: wordTextRange)
                         let wordStartMs = Int64(nsLineContent.substring(with: wordStartMsRange)) ?? 0
                         
-                        // 如果找到单词文本，处理可能的额外括号
-                        if wordTextRange.location != NSNotFound {
-                            var wordText = nsLineContent.substring(with: wordTextRange)
-                            
-                            // 如果单词被额外括号包围，添加括号使其显示为(单词)
-                            if lineContent.contains("(\(wordText))") || lineContent.contains("((\(wordStartMs),") {
-                                wordText = "(\(wordText))"
-                            }
-                            
-                            fullLineText += wordText
-                            
-                            let syllable = SyllableDto(
-                                startTimeMs: wordStartMs,
-                                numChars: Int64(wordText.count)
-                            )
-                            syllables.append(syllable)
-                        }
+                        fullLineText += wordText
+                        
+                        let syllable = SyllableDto(
+                            startTimeMs: wordStartMs,
+                            numChars: Int64(wordText.count)
+                        )
+                        syllables.append(syllable)
                     }
                 } catch {
                     continue
