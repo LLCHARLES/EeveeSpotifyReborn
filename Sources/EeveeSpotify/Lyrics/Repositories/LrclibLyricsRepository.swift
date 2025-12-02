@@ -3,23 +3,12 @@ import Foundation
 class LrclibLyricsRepository: LyricsRepository {
     var apiUrl: String
     private let session: URLSession
-
-    // 预编译正则表达式，避免重复编译
-    private static let lrcPattern: NSRegularExpression = {
-        try! NSRegularExpression(pattern: "\\[(\\d+):(\\d+)\\.(\\d+)\\](.*)")
-    }()
     
-    private static let yrcLinePattern: NSRegularExpression = {
-        try! NSRegularExpression(pattern: #"\[(\d+),(\d+)\](.*)"#)
-    }()
-    
-    private static let yrcWordPattern: NSRegularExpression = {
-        try! NSRegularExpression(pattern: #"([^\(\)]*?)\((\d+),(\d+)\)"#)
-    }()
-    
-    private static let yrcSpecialPattern: NSRegularExpression = {
-        try! NSRegularExpression(pattern: #"\(\((\d+),(\d+)\)([^\(\)]+)\)"#)
-    }()
+    // ✅ 缓存所有正则表达式为静态变量
+    private static let lrcRegex = try! NSRegularExpression(pattern: #"\[(\d+):(\d+)\.(\d+)\](.*)"#)
+    private static let yrcLineRegex = try! NSRegularExpression(pattern: #"\[(\d+),(\d+)\](.*)"#)
+    private static let yrcWordRegex = try! NSRegularExpression(pattern: #"([^\(]*?)\((\d+),(\d+)\)"#)
+    private static let specialFormatRegex = try! NSRegularExpression(pattern: #"\(\((\d+),(\d+)\)([^\(\)]+)\)"#)
 
     private init(apiUrl: String) {
         self.apiUrl = apiUrl
@@ -79,12 +68,14 @@ class LrclibLyricsRepository: LyricsRepository {
         return try JSONDecoder().decode(LrclibSong.self, from: data)
     }
     
-    // 解析 LRC 格式歌词
+    // ✅ 优化 LRC 格式歌词解析
     private func parseLrcLyrics(_ lrcContent: String) -> [LyricsLineDto] {
         var lines: [LyricsLineDto] = []
+        lines.reserveCapacity(50) // 预分配容量
+        
         let nsString = lrcContent as NSString
-        let matches = LrclibLyricsRepository.lrcPattern.matches(
-            in: lrcContent,
+        let matches = Self.lrcRegex.matches(
+            in: lrcContent, 
             range: NSRange(location: 0, length: nsString.length)
         )
         
@@ -109,83 +100,68 @@ class LrclibLyricsRepository: LyricsRepository {
         return lines
     }
     
-    // 解析逐字歌词 (YRC格式) - 优化版，保留特殊格式处理
+    // ✅ 优化逐字歌词解析 (YRC格式) - 保留特殊格式处理
     private func parseYrcLyrics(_ yrcContent: String) -> [LyricsLineDto] {
         var lines: [LyricsLineDto] = []
+        lines.reserveCapacity(50) // 预分配容量
         
-        // 按行分割（不过滤空行，API端已经过滤）
         let lineStrings = yrcContent.components(separatedBy: "\n")
         
         for lineString in lineStrings {
-            guard let lineMatch = LrclibLyricsRepository.yrcLinePattern.firstMatch(
-                in: lineString,
-                range: NSRange(location: 0, length: lineString.count)
-            ) else { continue }
+            guard !lineString.isEmpty else { continue }
             
             let nsString = lineString as NSString
-            let lineStartMs = Int(nsString.substring(with: lineMatch.range(at: 1))) ?? 0
-            let lineContent = nsString.substring(with: lineMatch.range(at: 3))
+            let lineMatches = Self.yrcLineRegex.matches(
+                in: lineString, 
+                range: NSRange(location: 0, length: nsString.length)
+            )
             
+            guard let match = lineMatches.first else { continue }
+            
+            let lineStartMs = Int64(nsString.substring(with: match.range(at: 1))) ?? 0
+            let lineContent = nsString.substring(with: match.range(at: 3))
+            
+            // ✅ 提前检测是否有特殊格式（只检测一次）
+            let hasSpecialFormat = Self.specialFormatRegex.firstMatch(
+                in: lineContent,
+                range: NSRange(location: 0, length: lineContent.count)
+            ) != nil
+            
+            // 使用数组收集，避免字符串频繁拼接
+            var wordTexts: [String] = []
             var syllables: [SyllableDto] = []
-            var fullLineText = ""
             
-            // 首先检查是否有特殊格式：((时间戳)单词)
+            let wordMatches = Self.yrcWordRegex.matches(
+                in: lineContent,
+                range: NSRange(location: 0, length: lineContent.count)
+            )
+            
             let nsLineContent = lineContent as NSString
-            let specialMatches = LrclibLyricsRepository.yrcSpecialPattern.matches(
-                in: lineContent,
-                range: NSRange(location: 0, length: lineContent.count)
-            )
             
-            // 处理特殊格式
-            if !specialMatches.isEmpty {
-                // 找到特殊格式，提取单词并添加括号
-                for specialMatch in specialMatches {
-                    let specialWordRange = specialMatch.range(at: 3)
-                    let specialWord = nsLineContent.substring(with: specialWordRange)
-                    fullLineText += "(\(specialWord))"
-                    
-                    // 获取特殊格式的时间戳
-                    let wordStartMsRange = specialMatch.range(at: 1)
-                    let wordStartMs = Int64(nsLineContent.substring(with: wordStartMsRange)) ?? 0
-                    
-                    syllables.append(SyllableDto(
-                        startTimeMs: wordStartMs,
-                        numChars: Int64("(\(specialWord))".count)
-                    ))
-                }
-            }
-            
-            // 然后处理普通格式的单词
-            let wordMatches = LrclibLyricsRepository.yrcWordPattern.matches(
-                in: lineContent,
-                range: NSRange(location: 0, length: lineContent.count)
-            )
-            
-            for match in wordMatches {
-                let wordText = nsString.substring(with: match.range(at: 1))
-                let wordStartMs = Int64(nsString.substring(with: match.range(at: 2))) ?? 0
+            for wordMatch in wordMatches {
+                let wordTextRange = wordMatch.range(at: 1)
+                let wordStartMs = Int64(nsLineContent.substring(with: wordMatch.range(at: 2))) ?? 0
                 
-                // 跳过空文本
-                if wordText.isEmpty {
-                    continue
-                }
-                
-                // 检查这个单词是否已经被特殊格式处理过
-                // 通过检查单词是否在特殊格式匹配范围内
-                var isProcessedBySpecialFormat = false
-                for specialMatch in specialMatches {
-                    let specialWordRange = specialMatch.range(at: 3)
-                    let specialWord = nsLineContent.substring(with: specialWordRange)
+                if wordTextRange.location != NSNotFound {
+                    var wordText = nsLineContent.substring(with: wordTextRange)
                     
-                    // 如果当前单词包含在特殊格式的单词中，说明已经被处理过
-                    if wordText.contains(specialWord) || specialWord.contains(wordText) {
-                        isProcessedBySpecialFormat = true
-                        break
+                    // ✅ 处理特殊格式：((时间戳)单词) -> (单词)
+                    if hasSpecialFormat {
+                        let specialMatches = Self.specialFormatRegex.matches(
+                            in: lineContent,
+                            range: NSRange(location: 0, length: lineContent.count)
+                        )
+                        
+                        for specialMatch in specialMatches {
+                            let specialWordRange = specialMatch.range(at: 3)
+                            let specialWord = nsLineContent.substring(with: specialWordRange)
+                            wordText = "(\(specialWord))"
+                            break // 只处理第一个匹配的特殊格式
+                        }
                     }
-                }
-                
-                if !isProcessedBySpecialFormat && !wordText.isEmpty {
-                    fullLineText += wordText
+                    
+                    wordTexts.append(wordText)
+                    
                     syllables.append(SyllableDto(
                         startTimeMs: wordStartMs,
                         numChars: Int64(wordText.count)
@@ -193,13 +169,14 @@ class LrclibLyricsRepository: LyricsRepository {
                 }
             }
             
-            if !fullLineText.isEmpty || !syllables.isEmpty {
-                lines.append(LyricsLineDto(
-                    words: fullLineText,
-                    startTimeMs: Int64(lineStartMs),
-                    syllables: syllables.isEmpty ? nil : syllables
-                ))
-            }
+            // 一次性拼接所有文本
+            let fullLineText = wordTexts.joined()
+            
+            lines.append(LyricsLineDto(
+                words: fullLineText,
+                startTimeMs: lineStartMs,
+                syllables: syllables.isEmpty ? nil : syllables
+            ))
         }
         
         // 按时间排序
@@ -215,18 +192,19 @@ class LrclibLyricsRepository: LyricsRepository {
             .map { LyricsLineDto(words: $0, startTimeMs: nil, syllables: nil) }
     }
     
-    // 对齐翻译歌词和原歌词
+    // ✅ 优化翻译歌词对齐
     private func alignTranslations(originalLines: [LyricsLineDto], translationLines: [LyricsLineDto]) -> [String] {
         var alignedTranslations: [String] = Array(repeating: "", count: originalLines.count)
         
         for translation in translationLines {
+            guard let translationStartTimeMs = translation.startTimeMs else { continue }
+            
             // 找到时间戳最接近的原歌词行
             var closestIndex = -1
             var minTimeDiff = Int.max
             
             for (index, originalLine) in originalLines.enumerated() {
-                guard let originalStartTimeMs = originalLine.startTimeMs,
-                      let translationStartTimeMs = translation.startTimeMs else { continue }
+                guard let originalStartTimeMs = originalLine.startTimeMs else { continue }
                 
                 let timeDiff = abs(Int(originalStartTimeMs) - Int(translationStartTimeMs))
                 if timeDiff < minTimeDiff {
@@ -290,7 +268,9 @@ class LrclibLyricsRepository: LyricsRepository {
         }
         
         // 处理翻译歌词 - 使用对齐方法
-        if let translatedLyrics = song.translatedLyrics, !translatedLyrics.isEmpty {
+        if let translatedLyrics = song.translatedLyrics, 
+           !translatedLyrics.isEmpty,
+           !lyricsLines.isEmpty {
             // 解析翻译歌词
             let translationLines = parseLrcLyrics(translatedLyrics)
             
@@ -306,14 +286,11 @@ class LrclibLyricsRepository: LyricsRepository {
             )
         }
         
-        // 处理罗马化歌词
-        var romanization = LyricsRomanizationStatus.original
-        
-        // 简单判断：如果有中文歌词，则认为可以罗马化
-        let hasChinese = lyricsLines.contains { line in
-            line.words.range(of: "[\\u4e00-\\u9fff]", options: .regularExpression) != nil
-        }
-        romanization = hasChinese ? .canBeRomanized : .original
+        // ✅ 优化中文检测（使用 CharacterSet 比正则更快）
+        let chineseCharacterSet = CharacterSet(charactersIn: "\u{4e00}"..."\u{9fff}")
+        let romanization: LyricsRomanizationStatus = lyricsLines.contains(where: { 
+            $0.words.rangeOfCharacter(from: chineseCharacterSet) != nil
+        }) ? .canBeRomanized : .original
         
         return LyricsDto(
             lines: lyricsLines,
