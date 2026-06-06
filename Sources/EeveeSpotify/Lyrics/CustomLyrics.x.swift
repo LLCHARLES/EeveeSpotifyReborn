@@ -16,10 +16,7 @@ private let petitLyricsRepository = PetitLyricsRepository()
 
 // 添加繁体转简体函数
 private func traditionalToSimplified(_ text: String) -> String {
-    // 使用 NSString 的 transforming 方法
-    let input = text as NSString
-    let output = input.applyingTransform(.traditionalChineseToSimplifiedChinese, reverse: false)
-    return output ?? text
+    return text.applyingTransform(.traditionalToSimplified, reverse: false) ?? text
 }
 
 private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
