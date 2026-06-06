@@ -14,6 +14,13 @@ var hasShownUnauthorizedPopUp = false
 private let geniusLyricsRepository = GeniusLyricsRepository()
 private let petitLyricsRepository = PetitLyricsRepository()
 
+// 添加繁体转简体函数
+private func traditionalToSimplified(_ text: String) -> String {
+    let mutableString = NSMutableString(string: text) as CFMutableString
+    CFStringTransform(mutableString, nil, kCFStringTransformTraditionalChineseToSimplifiedChinese, false)
+    return mutableString as String
+}
+
 private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
     guard
         let track = statefulPlayer?.currentTrack() ??
@@ -91,6 +98,11 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
             lyricsState.fallbackError = .unknownError
         }
         
+        // 修改：LRCLIB 失败时直接回退到 Spotify 原生歌词
+        if source == .lrclib {
+            throw LyricsError.invalidSource  // 使用原生歌词
+        }
+        
         if source == .genius || !UserDefaults.lyricsOptions.geniusFallback {
             throw error
         }
@@ -101,15 +113,36 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
         lyricsDto = try repository.getLyrics(searchQuery, options: options)
     }
     
-    lyricsState.isEmpty = lyricsDto.lines.isEmpty
+    // 转换歌词和翻译（繁体转简体）
+    let convertedLines = lyricsDto.lines.map { line in
+        var convertedLine = line
+        convertedLine.words = traditionalToSimplified(line.words)
+        return convertedLine
+    }
     
-    lyricsState.wasRomanized = lyricsDto.romanization == .romanized
-        || (lyricsDto.romanization == .canBeRomanized && UserDefaults.lyricsOptions.romanization)
+    let convertedTranslation = lyricsDto.translation.map { translation in
+        var convertedTranslation = translation
+        convertedTranslation.lines = translation.lines.map { traditionalToSimplified($0) }
+        return convertedTranslation
+    }
+    
+    let convertedLyricsDto = LyricsDto(
+        lines: convertedLines,
+        timeSynced: lyricsDto.timeSynced,
+        isSyllableSynced: lyricsDto.isSyllableSynced,
+        romanization: lyricsDto.romanization,
+        translation: convertedTranslation
+    )
+    
+    lyricsState.isEmpty = convertedLyricsDto.lines.isEmpty
+    
+    lyricsState.wasRomanized = convertedLyricsDto.romanization == .romanized
+        || (convertedLyricsDto.romanization == .canBeRomanized && UserDefaults.lyricsOptions.romanization)
     
     lyricsState.loadedSuccessfully = true
 
     var colorLyricsResponse = ColorLyricsResponse()
-    colorLyricsResponse.lyrics = lyricsDto.toSpotifyLyricsData(source: source.description)
+    colorLyricsResponse.lyrics = convertedLyricsDto.toSpotifyLyricsData(source: source == .lrclib ? "Spotify" : source.description)
     
     return colorLyricsResponse
 }
