@@ -1,5 +1,6 @@
 import Orion
 import SwiftUI
+import CoreFoundation  // 添加这个导入
 
 struct BaseLyricsGroup: HookGroup { }
 
@@ -155,33 +156,31 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: ColorL
         colorLyricsResponse = originalLyrics
         
         // 将 Spotify 原生歌词从繁体转换为简体
-        if let lyricsData = colorLyricsResponse.lyrics {
-            var convertedLyricsData = lyricsData
-            
-            // 转换普通歌词行
-            if let lines = convertedLyricsData.lines {
-                var convertedLines: [LyricsLine] = []
-                for line in lines {
-                    var convertedLine = line
-                    if let text = line.text {
-                        convertedLine.text = traditionalToSimplified(text)
-                    }
-                    convertedLines.append(convertedLine)
-                }
-                convertedLyricsData.lines = convertedLines
-            }
-            
-            // 转换翻译行（如果有）
-            if let translations = convertedLyricsData.translation {
-                var convertedTranslations: [String] = []
-                for translation in translations {
-                    convertedTranslations.append(traditionalToSimplified(translation))
-                }
-                convertedLyricsData.translation = convertedTranslations
-            }
-            
-            colorLyricsResponse.lyrics = convertedLyricsData
+        var convertedLyricsData = colorLyricsResponse.lyrics
+        
+        // 转换普通歌词行 (LyricsLine 使用 words 属性)
+        var convertedLines: [LyricsLine] = []
+        for line in convertedLyricsData.lines {
+            var convertedLine = line
+            convertedLine.words = traditionalToSimplified(line.words)
+            convertedLines.append(convertedLine)
         }
+        convertedLyricsData.lines = convertedLines
+        
+        // 转换替代语言/翻译行 (如果有)
+        var convertedAlternatives: [AlternativeLanguages] = []
+        for alternative in convertedLyricsData.alternatives {
+            var convertedAlternative = alternative
+            var convertedAltLines: [String] = []
+            for line in alternative.lines {
+                convertedAltLines.append(traditionalToSimplified(line))
+            }
+            convertedAlternative.lines = convertedAltLines
+            convertedAlternatives.append(convertedAlternative)
+        }
+        convertedLyricsData.alternatives = convertedAlternatives
+        
+        colorLyricsResponse.lyrics = convertedLyricsData
     } catch {
         throw error
     }
