@@ -1,6 +1,5 @@
 import Orion
 import SwiftUI
-import CoreFoundation  // 添加这个导入
 
 struct BaseLyricsGroup: HookGroup { }
 
@@ -17,9 +16,10 @@ private let petitLyricsRepository = PetitLyricsRepository()
 
 // 添加繁体转简体函数
 private func traditionalToSimplified(_ text: String) -> String {
-    let mutableString = NSMutableString(string: text) as CFMutableString
-    CFStringTransform(mutableString, nil, kCFStringTransformTraditionalChineseToSimplifiedChinese, false)
-    return mutableString as String
+    // 使用 NSString 的 transforming 方法
+    let input = text as NSString
+    let output = input.applyingTransform(.traditionalChineseToSimplifiedChinese, reverse: false)
+    return output ?? text
 }
 
 private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
