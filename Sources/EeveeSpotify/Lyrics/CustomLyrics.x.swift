@@ -98,7 +98,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
             lyricsState.fallbackError = .unknownError
         }
         
-        // 修改：LRCLIB 失败时直接回退到 Spotify 原生歌词
+        // LRCLIB 失败时直接回退到 Spotify 原生歌词
         if source == .lrclib {
             throw LyricsError.invalidSource  // 使用原生歌词
         }
@@ -113,36 +113,16 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
         lyricsDto = try repository.getLyrics(searchQuery, options: options)
     }
     
-    // 转换歌词和翻译（繁体转简体）
-    let convertedLines = lyricsDto.lines.map { line in
-        var convertedLine = line
-        convertedLine.words = traditionalToSimplified(line.words)
-        return convertedLine
-    }
+    // 非回退情况：不转换歌词，保持原样
+    lyricsState.isEmpty = lyricsDto.lines.isEmpty
     
-    let convertedTranslation = lyricsDto.translation.map { translation in
-        var convertedTranslation = translation
-        convertedTranslation.lines = translation.lines.map { traditionalToSimplified($0) }
-        return convertedTranslation
-    }
-    
-    let convertedLyricsDto = LyricsDto(
-        lines: convertedLines,
-        timeSynced: lyricsDto.timeSynced,
-        isSyllableSynced: lyricsDto.isSyllableSynced,
-        romanization: lyricsDto.romanization,
-        translation: convertedTranslation
-    )
-    
-    lyricsState.isEmpty = convertedLyricsDto.lines.isEmpty
-    
-    lyricsState.wasRomanized = convertedLyricsDto.romanization == .romanized
-        || (convertedLyricsDto.romanization == .canBeRomanized && UserDefaults.lyricsOptions.romanization)
+    lyricsState.wasRomanized = lyricsDto.romanization == .romanized
+        || (lyricsDto.romanization == .canBeRomanized && UserDefaults.lyricsOptions.romanization)
     
     lyricsState.loadedSuccessfully = true
 
     var colorLyricsResponse = ColorLyricsResponse()
-    colorLyricsResponse.lyrics = convertedLyricsDto.toSpotifyLyricsData(source: source == .lrclib ? "Spotify" : source.description)
+    colorLyricsResponse.lyrics = lyricsDto.toSpotifyLyricsData(source: source.description)
     
     return colorLyricsResponse
 }
@@ -161,7 +141,50 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: ColorL
         throw LyricsError.trackMismatch
     }
     
-    var colorLyricsResponse = try loadCustomLyricsForCurrentTrack()
+    var colorLyricsResponse: ColorLyricsResponse
+    
+    do {
+        // 尝试获取自定义歌词
+        colorLyricsResponse = try loadCustomLyricsForCurrentTrack()
+    } catch LyricsError.invalidSource {
+        // 只有 LRCLIB 失败回退到原生歌词时才转换繁体到简体
+        guard let originalLyrics = originalLyrics else {
+            throw LyricsError.noSuchSong
+        }
+        
+        colorLyricsResponse = originalLyrics
+        
+        // 将 Spotify 原生歌词从繁体转换为简体
+        if let lyricsData = colorLyricsResponse.lyrics {
+            var convertedLyricsData = lyricsData
+            
+            // 转换普通歌词行
+            if let lines = convertedLyricsData.lines {
+                var convertedLines: [LyricsLine] = []
+                for line in lines {
+                    var convertedLine = line
+                    if let text = line.text {
+                        convertedLine.text = traditionalToSimplified(text)
+                    }
+                    convertedLines.append(convertedLine)
+                }
+                convertedLyricsData.lines = convertedLines
+            }
+            
+            // 转换翻译行（如果有）
+            if let translations = convertedLyricsData.translation {
+                var convertedTranslations: [String] = []
+                for translation in translations {
+                    convertedTranslations.append(traditionalToSimplified(translation))
+                }
+                convertedLyricsData.translation = convertedTranslations
+            }
+            
+            colorLyricsResponse.lyrics = convertedLyricsData
+        }
+    } catch {
+        throw error
+    }
     
     let lyricsColorsSettings = UserDefaults.lyricsColors
     
@@ -194,7 +217,6 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: ColorL
         }
         
         var colorData = ColorData()
-        // 直接使用 Int32(bitPattern:) 转换 UInt32 到 Int32
         colorData.background = Int32(bitPattern: color.uInt32)
         colorData.text = Int32(bitPattern: Color.black.uInt32)
         colorData.highlightText = Int32(bitPattern: Color.white.uInt32)
