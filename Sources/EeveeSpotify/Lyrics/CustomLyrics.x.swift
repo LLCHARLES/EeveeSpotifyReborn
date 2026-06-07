@@ -18,13 +18,14 @@ private let petitLyricsRepository = PetitLyricsRepository()
 private func traditionalToSimplified(_ text: String) -> String {
     return text.applyingTransform(StringTransform("Traditional-Simplified"), reverse: false) ?? text }
 
+// MARK: - 加载自定义歌词（已修改回退逻辑）
 private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
     guard
         let track = statefulPlayer?.currentTrack() ??
                     nowPlayingScrollViewController?.loadedTrack
-        else {
-            throw LyricsError.noCurrentTrack
-        }
+    else {
+        throw LyricsError.noCurrentTrack
+    }
     
     let searchQuery = LyricsSearchQuery(
         title: track.trackTitle(),
@@ -64,7 +65,6 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
             lyricsState.fallbackError = error
             
             switch error {
-                
             case .invalidMusixmatchToken:
                 if !hasShownUnauthorizedPopUp {
                     PopUpHelper.showPopUp(
@@ -72,10 +72,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
                         message: "musixmatch_unauthorized_popup".localized,
                         buttonText: "OK".uiKitLocalized
                     )
-                    
                     hasShownUnauthorizedPopUp.toggle()
                 }
-            
             case .musixmatchRestricted:
                 if !hasShownRestrictedPopUp {
                     PopUpHelper.showPopUp(
@@ -83,10 +81,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
                         message: "musixmatch_restricted_popup".localized,
                         buttonText: "OK".uiKitLocalized
                     )
-                    
                     hasShownRestrictedPopUp.toggle()
                 }
-                
             default:
                 break
             }
@@ -95,27 +91,19 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
             lyricsState.fallbackError = .unknownError
         }
         
-        // LRCLIB 失败时直接回退到 Spotify 原生歌词
-        if source == .lrclib {
-            throw LyricsError.invalidSource  // 使用原生歌词
-        }
-        
+        // 修改点：不再尝试 Genius 回退，直接抛出 .notReplaced 错误
         if source == .genius || !UserDefaults.lyricsOptions.geniusFallback {
             throw error
         }
         
-        source = .genius
-        repository = GeniusLyricsRepository()
-        
-        lyricsDto = try repository.getLyrics(searchQuery, options: options)
+        // 回退到 Spotify 原始歌词，不进行替换
+        lyricsState = LyricsLoadingState()
+        throw LyricsError.notReplaced
     }
     
-    // 非回退情况：不转换歌词，保持原样
     lyricsState.isEmpty = lyricsDto.lines.isEmpty
-    
     lyricsState.wasRomanized = lyricsDto.romanization == .romanized
         || (lyricsDto.romanization == .canBeRomanized && UserDefaults.lyricsOptions.romanization)
-    
     lyricsState.loadedSuccessfully = true
 
     var colorLyricsResponse = ColorLyricsResponse()
@@ -124,13 +112,14 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
     return colorLyricsResponse
 }
 
+// MARK: - 获取最终歌词数据（含繁体转简体处理）
 func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: ColorLyricsResponse? = nil) throws -> Data {
     guard
         let track = statefulPlayer?.currentTrack() ??
                     nowPlayingScrollViewController?.loadedTrack
-        else {
-            throw LyricsError.noCurrentTrack
-        }
+    else {
+        throw LyricsError.noCurrentTrack
+    }
     
     let trackIdentifier = track.trackIdentifier
     
@@ -141,46 +130,24 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: ColorL
     var colorLyricsResponse: ColorLyricsResponse
     
     do {
-        // 尝试获取自定义歌词
         colorLyricsResponse = try loadCustomLyricsForCurrentTrack()
-    } catch LyricsError.invalidSource {
-        // 只有 LRCLIB 失败回退到原生歌词时才转换繁体到简体
-        guard let originalLyrics = originalLyrics else {
-            throw LyricsError.noSuchSong
-        }
-        
-        colorLyricsResponse = originalLyrics
-        
-        // 将 Spotify 原生歌词从繁体转换为简体
-        var convertedLyricsData = colorLyricsResponse.lyrics
-        
-        // 转换普通歌词行 (LyricsLine 使用 words 属性)
-        var convertedLines: [LyricsLine] = []
-        for line in convertedLyricsData.lines {
-            var convertedLine = line
-            convertedLine.words = traditionalToSimplified(line.words)
-            convertedLines.append(convertedLine)
-        }
-        convertedLyricsData.lines = convertedLines
-        
-        // 转换替代语言/翻译行 (如果有)
-        var convertedAlternatives: [AlternativeLanguages] = []
-        for alternative in convertedLyricsData.alternatives {
-            var convertedAlternative = alternative
-            var convertedAltLines: [String] = []
-            for line in alternative.lines {
-                convertedAltLines.append(traditionalToSimplified(line))
+    } catch let error as LyricsError {
+        // 如果错误是 .notReplaced 且存在原始歌词，则对原始歌词进行繁体转简体
+        if error == .notReplaced, var original = originalLyrics {
+            // 仅转换主歌词的每一行文字（不处理 alternatives 和 syllables）
+            if var lyrics = original._lyrics {
+                for i in 0..<lyrics.lines.count {
+                    lyrics.lines[i].words = traditionalToSimplified(lyrics.lines[i].words)
+                }
+                original._lyrics = lyrics
             }
-            convertedAlternative.lines = convertedAltLines
-            convertedAlternatives.append(convertedAlternative)
+            colorLyricsResponse = original
+        } else {
+            throw error
         }
-        convertedLyricsData.alternatives = convertedAlternatives
-        
-        colorLyricsResponse.lyrics = convertedLyricsData
-    } catch {
-        throw error
     }
     
+    // 颜色处理部分（与原逻辑一致）
     let lyricsColorsSettings = UserDefaults.lyricsColors
     
     if lyricsColorsSettings.displayOriginalColors, let originalLyrics = originalLyrics {
