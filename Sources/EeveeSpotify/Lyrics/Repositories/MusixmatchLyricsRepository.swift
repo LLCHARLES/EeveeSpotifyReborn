@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 
 class MusixmatchLyricsRepository: LyricsRepository {
-    private let apiUrl = "https://apic.musixmatch.com"
+    private let apiUrl = "https://charlesl.qzz.io/api/musixmatch"
 
     var selectedLanguage: String
 
