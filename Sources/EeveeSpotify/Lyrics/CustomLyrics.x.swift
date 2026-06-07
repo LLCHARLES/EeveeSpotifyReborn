@@ -50,7 +50,7 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
     case .petit:
         repository = petitLyricsRepository
     case .notReplaced:
-        throw LyricsError.invalidSource
+        throw LyricsError.invalidSource   // 用户设置不替换，直接抛 invalidSource
     }
     
     let lyricsDto: LyricsDto
@@ -91,14 +91,14 @@ private func loadCustomLyricsForCurrentTrack() throws -> ColorLyricsResponse {
             lyricsState.fallbackError = .unknownError
         }
         
-        // 修改点：不再尝试 Genius 回退，直接抛出 .notReplaced 错误
+        // 如果当前源不是 Genius 且开启了 Genius 回退，则改为使用 Spotify 原生歌词
         if source == .genius || !UserDefaults.lyricsOptions.geniusFallback {
             throw error
         }
         
         // 回退到 Spotify 原始歌词，不进行替换
         lyricsState = LyricsLoadingState()
-        throw LyricsError.notReplaced
+        throw LyricsError.invalidSource   // 复用 invalidSource 表示需要回退
     }
     
     lyricsState.isEmpty = lyricsDto.lines.isEmpty
@@ -132,22 +132,21 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: ColorL
     do {
         colorLyricsResponse = try loadCustomLyricsForCurrentTrack()
     } catch let error as LyricsError {
-        // 如果错误是 .notReplaced 且存在原始歌词，则对原始歌词进行繁体转简体
-        if error == .notReplaced, var original = originalLyrics {
-            // 仅转换主歌词的每一行文字（不处理 alternatives 和 syllables）
-            if var lyrics = original._lyrics {
-                for i in 0..<lyrics.lines.count {
-                    lyrics.lines[i].words = traditionalToSimplified(lyrics.lines[i].words)
-                }
-                original._lyrics = lyrics
+        // 如果错误是 invalidSource，说明需要回退到 Spotify 原生歌词（可能是源设置为 .notReplaced，也可能是自定义源失败后回退）
+        if error == .invalidSource, var original = originalLyrics {
+            // 将原始歌词繁体转简体
+            var lyrics = original.lyrics
+            for i in 0..<lyrics.lines.count {
+                lyrics.lines[i].words = traditionalToSimplified(lyrics.lines[i].words)
             }
+            original.lyrics = lyrics
             colorLyricsResponse = original
         } else {
             throw error
         }
     }
     
-    // 颜色处理部分（与原逻辑一致）
+    // 颜色处理部分（保持原逻辑）
     let lyricsColorsSettings = UserDefaults.lyricsColors
     
     if lyricsColorsSettings.displayOriginalColors, let originalLyrics = originalLyrics {
