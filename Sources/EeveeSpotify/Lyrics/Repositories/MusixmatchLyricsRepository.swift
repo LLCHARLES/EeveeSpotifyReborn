@@ -184,48 +184,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
             return cached.dto
         }
 
-        // ========== 第一步：获取 RichSync 逐字歌词 ==========
-        var richsyncLines: [LyricsLineDto] = []
-        var hasRichSync = false
-        var subtitleLanguage: String?
-        
-        var richsyncQuery: [String: Any] = [
-            "track_spotify_id": query.spotifyTrackId,
-            "q_track": query.title,
-            "q_artist": query.primaryArtist,
-            "format": "json"
-        ]
-        
-        if !selectedLanguage.isEmpty && selectedLanguage != "en" {
-            richsyncQuery["selected_language"] = selectedLanguage
-        }
-        
-        do {
-            let data = try perform(
-                "/ws/1.1/track.richsync.get",
-                query: richsyncQuery
-            )
-            
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let message = json["message"] as? [String: Any],
-               let header = message["header"] as? [String: Any],
-               let statusCode = header["status_code"] as? Int,
-               statusCode == 200,
-               let body = message["body"] as? [String: Any],
-               let richsync = body["richsync"] as? [String: Any],
-               let richsyncBodyString = richsync["richsync_body"] as? String {
-                
-                richsyncLines = parseRichSyncLyrics(richsyncBodyString)
-                if !richsyncLines.isEmpty {
-                    hasRichSync = true
-                    subtitleLanguage = richsync["richssync_language"] as? String
-                }
-            }
-        } catch {
-            print("RichSync request failed: \(error)")
-        }
-
-        // ========== 第二步：获取字幕（包含翻译数据） ==========
+        // 准备请求参数
         var musixmatchQuery: [String: Any] = [
             "track_spotify_id": query.spotifyTrackId,
             "subtitle_format": "mxm",
@@ -238,6 +197,7 @@ class MusixmatchLyricsRepository: LyricsRepository {
             musixmatchQuery["part"] = "subtitle_translated"
         }
 
+        // 发送请求（代理会自动合并 richsync + subtitles）
         let data = try perform(
             "/ws/1.1/macro.subtitles.get",
             query: musixmatchQuery
@@ -246,9 +206,30 @@ class MusixmatchLyricsRepository: LyricsRepository {
         var romanized = false
         var translation: LyricsTranslationDto? = nil
         var subtitleLines: [LyricsLineDto] = []
+        var richsyncLines: [LyricsLineDto] = []
+        var hasRichSync = false
+        var subtitleLanguage: String?
 
         let macroCalls = try getMacroCalls(data)
 
+        // ========== 检查是否有 RichSync 逐字歌词 ==========
+        if let trackRichsyncGet = macroCalls["track.richsync.get"] as? [String: Any],
+           let richsyncMessage = trackRichsyncGet["message"] as? [String: Any],
+           let header = richsyncMessage["header"] as? [String: Any],
+           let statusCode = header["status_code"] as? Int,
+           statusCode == 200,
+           let body = richsyncMessage["body"] as? [String: Any],
+           let richsync = body["richsync"] as? [String: Any],
+           let richsyncBodyString = richsync["richsync_body"] as? String {
+            
+            richsyncLines = parseRichSyncLyrics(richsyncBodyString)
+            if !richsyncLines.isEmpty {
+                hasRichSync = true
+                subtitleLanguage = richsync["richssync_language"] as? String
+            }
+        }
+
+        // ========== 处理字幕（包含翻译） ==========
         if let trackSubtitlesGet = macroCalls["track.subtitles.get"] as? [String: Any],
             let subtitlesMessage = trackSubtitlesGet["message"] as? [String: Any],
             let subtitle = try? getFirstSubtitle(subtitlesMessage),
@@ -258,7 +239,6 @@ class MusixmatchLyricsRepository: LyricsRepository {
                 [MusixmatchSubtitle].self, from: subtitleBody.data(using: .utf8)!
             )
         {
-            // 如果没有从 RichSync 获取到语言，使用字幕的语言
             if subtitleLanguage == nil {
                 subtitleLanguage = subLanguage
             }
@@ -322,24 +302,23 @@ class MusixmatchLyricsRepository: LyricsRepository {
             }
         }
 
-        // ========== 第三步：合并结果 ==========
+        // ========== 合并结果 ==========
         let finalLines: [LyricsLineDto]
         let isSyllableSynced: Bool
         let timeSynced: Bool
         
         if hasRichSync && !richsyncLines.isEmpty {
-            // 使用逐字歌词，但需要合并翻译
+            // 使用逐字歌词，合并翻译
             finalLines = richsyncLines
             isSyllableSynced = true
             timeSynced = true
             
-            // 如果字幕有翻译，尝试按行对齐
+            // 如果字幕有翻译，按时间对齐
             if translation != nil && !subtitleLines.isEmpty {
                 var alignedTranslations: [String] = Array(repeating: "", count: richsyncLines.count)
                 
                 for (index, richLine) in richsyncLines.enumerated() {
                     if let richStartTime = richLine.startTimeMs {
-                        // 找到时间最接近的字幕行
                         var closestIndex = -1
                         var minDiff = Int64.max
                         
